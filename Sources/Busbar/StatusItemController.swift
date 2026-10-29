@@ -95,9 +95,11 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         let size = host.preferredContentSize == .zero ? host.view.fittingSize : host.preferredContentSize
         let visible = (buttonWindow.screen ?? NSScreen.main)?.visibleFrame ?? .zero
 
+        // The window includes a transparent shadow margin around the visible panel.
+        let margin = DropdownPanelContent.shadowMargin
         var x = anchor.midX - size.width / 2
-        x = min(max(x, visible.minX + 8), visible.maxX - size.width - 8)
-        let top = anchor.minY - 6
+        x = min(max(x, visible.minX + 8 - margin), visible.maxX - size.width + margin - 8)
+        let top = anchor.minY - 6 + margin
         panel.setFrame(NSRect(x: x, y: top - size.height, width: size.width, height: size.height), display: true)
     }
 
@@ -115,7 +117,8 @@ private final class DropdownPanel: NSPanel {
         level = .popUpMenu
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // The glass draws its own shadow, inside the content's transparent margin.
+        hasShadow = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         isReleasedWhenClosed = false
     }
@@ -132,6 +135,10 @@ private final class DropdownPanel: NSPanel {
 
 /// The dropdown on a tinted glass background with rounded corners.
 struct DropdownPanelContent: View {
+    /// Transparent space around the panel so the glass's shadow isn't clipped
+    /// by the window's edges (which shows up as a hard rectangular outline).
+    static let shadowMargin: CGFloat = 24
+
     let monitor: Monitor
     let openSettings: () -> Void
 
@@ -143,6 +150,7 @@ struct DropdownPanelContent: View {
             // light content. Raise the opacity for a more solid look.
             .background(Color(nsColor: .windowBackgroundColor).opacity(0.6), in: shape)
             .modifier(PanelGlass(shape: shape))
+            .padding(Self.shadowMargin)
             .fixedSize()
     }
 }

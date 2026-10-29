@@ -38,7 +38,7 @@ struct DropdownView: View {
 
     private func header(_ s: PowerSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center) {
                 Text("\(Int(s.stateOfCharge.rounded()))%")
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .monospacedDigit()
