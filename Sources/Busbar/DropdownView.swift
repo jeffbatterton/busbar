@@ -32,9 +32,6 @@ struct DropdownView: View {
         }
         .padding(16)
         .frame(width: 300)
-        // The popover's glass is very transparent on macOS 26; tint it so text stays
-        // readable over light content. Raise the opacity for a more solid look.
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.6))
     }
 
     // MARK: Sections
