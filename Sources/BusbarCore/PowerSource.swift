@@ -31,15 +31,18 @@ public actor SimulatedDeltaProSource: PowerSource {
 
     private var soc: Double
     private let scenario: Scenario
+    private let extraBatteryConnected: Bool
     private var lastTick: Date?
     /// Speeds up battery drain/charge so changes are visible while testing.
     private let timeScale: Double
     // Delta Pro (3.6 kWh) + one extra battery (3.6 kWh).
-    private let capacityWh = 7200.0
+    private var capacityWh: Double { extraBatteryConnected ? 7200 : 3600 }
 
-    public init(startingSOC: Double = 78, scenario: Scenario = .realistic, timeScale: Double = 10) {
+    public init(startingSOC: Double = 78, scenario: Scenario = .realistic,
+                extraBatteryConnected: Bool = true, timeScale: Double = 10) {
         soc = startingSOC
         self.scenario = scenario
+        self.extraBatteryConnected = extraBatteryConnected
         self.timeScale = timeScale
     }
 
@@ -72,14 +75,13 @@ public actor SimulatedDeltaProSource: PowerSource {
         let toFull = net > 0 ? Int((100 - soc) / 100 * capacityWh / net * 60) : 5999
         let toEmpty = net < 0 ? Int(soc / 100 * capacityWh / -net * 60) : 5999
 
-        return Quotas([
+        var quotas = Quotas([
             "ems.f32LcdShowSoc": soc,
             "pd.soc": soc.rounded(),
-            "bmsMaster.f32ShowSoc": min(100, soc + 1.5),
+            "bmsMaster.f32ShowSoc": extraBatteryConnected ? min(100, soc + 1.5) : soc,
             "bmsMaster.temp": 27,
-            "ems.bms1Online": 3,
-            "bmsSlave1.f32ShowSoc": max(0, soc - 1.5),
-            "bmsSlave1.temp": 26,
+            "ems.bms0Online": 3,
+            "ems.bms1Online": extraBatteryConnected ? 3 : 0,
             "pd.wattsInSum": Double(wattsIn),
             "pd.wattsOutSum": Double(wattsOut),
             "mppt.inWatts": Double(soc >= 100 ? 0 : solar),
@@ -93,5 +95,9 @@ public actor SimulatedDeltaProSource: PowerSource {
             "ems.chgRemainTime": Double(toFull),
             "ems.dsgRemainTime": Double(toEmpty),
         ])
+        if extraBatteryConnected {
+            quotas.merge(Quotas(["bmsSlave1.f32ShowSoc": max(0, soc - 1.5), "bmsSlave1.temp": 26]))
+        }
+        return quotas
     }
 }

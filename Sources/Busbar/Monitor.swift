@@ -16,11 +16,13 @@ final class Monitor {
     private var alerts = AlertEngine()
     private var loop: Task<Void, Never>?
     /// Tweak with e.g. `defaults write com.batterton.busbar simulatorSOC -float 10`
-    /// and `defaults write com.batterton.busbar simulatorScenario charging`.
+    /// and `defaults write com.batterton.busbar simulatorScenario charging`,
+    /// or `defaults write com.batterton.busbar simulatorExtraBattery -bool false` to disconnect it.
     private let simulator = SimulatedDeltaProSource(
         startingSOC: UserDefaults.standard.object(forKey: "simulatorSOC") as? Double ?? 78,
         scenario: UserDefaults.standard.string(forKey: "simulatorScenario")
-            .flatMap(SimulatedDeltaProSource.Scenario.init(rawValue:)) ?? .realistic)
+            .flatMap(SimulatedDeltaProSource.Scenario.init(rawValue:)) ?? .realistic,
+        extraBatteryConnected: UserDefaults.standard.object(forKey: "simulatorExtraBattery") as? Bool ?? true)
 
     init(settings: AppSettings) {
         self.settings = settings
