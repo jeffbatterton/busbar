@@ -70,18 +70,18 @@ struct DropdownView: View {
 
     /// Green icon while power is coming in.
     private func inputRow(_ title: String, icon: String, watts value: Int, detail: String? = nil) -> some View {
-        row(title, icon: icon, iconColor: value > 0 ? .green : .secondary, watts: value, detail: detail)
+        row(title, icon: icon, lit: value > 0 ? .green : nil, watts: value, detail: detail)
     }
 
     /// Blue icon while the output is switched on, grey when off.
     private func outputRow(_ title: String, icon: String, watts value: Int, isOn: Bool) -> some View {
-        row(title, icon: icon, iconColor: isOn ? .blue : .secondary, watts: value)
+        row(title, icon: icon, lit: isOn ? .blue : nil, watts: value)
     }
 
-    private func row(_ title: String, icon: String, iconColor: Color, watts value: Int,
+    private func row(_ title: String, icon: String, lit: Color?, watts value: Int,
                      detail: String? = nil) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon).frame(width: 18).foregroundStyle(iconColor)
+            StatusIcon(name: icon, lit: lit)
             Text(title)
             if let detail {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
@@ -98,8 +98,7 @@ struct DropdownView: View {
             Text("Batteries").font(.subheadline.weight(.semibold))
             ForEach(s.batteries) { battery in
                 HStack(spacing: 8) {
-                    Image(systemName: "minus.plus.batteryblock").frame(width: 18)
-                        .foregroundStyle(battery.isAvailable ? .green : .red)
+                    StatusIcon(name: "minus.plus.batteryblock", lit: battery.isAvailable ? .green : .red)
                     Text(battery.name)
                     Spacer()
                     if let temp = battery.temperature {
@@ -210,5 +209,20 @@ struct DropdownView: View {
 
     private func watts(_ value: Int) -> String {
         value >= 1000 ? String(format: "%.2f kW", Double(value) / 1000) : "\(value) W"
+    }
+}
+
+/// A row icon that looks lit up: drawn in `lit` with a soft glow of the same color,
+/// or plain grey when `lit` is nil.
+private struct StatusIcon: View {
+    let name: String
+    let lit: Color?
+
+    var body: some View {
+        Image(systemName: name)
+            .foregroundStyle(lit ?? .secondary)
+            .shadow(color: (lit ?? .clear).opacity(0.7), radius: 2)
+            .shadow(color: (lit ?? .clear).opacity(0.4), radius: 5)
+            .frame(width: 18)
     }
 }
