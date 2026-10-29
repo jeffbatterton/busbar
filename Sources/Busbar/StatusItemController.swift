@@ -26,6 +26,8 @@ final class StatusItemController: NSObject {
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         popover.behavior = .transient
+        // Extend the content (and its tinted background) under the arrow so they match.
+        popover.hasFullSizeContent = true
 
         guard let button = item.button else { return }
         button.target = self
