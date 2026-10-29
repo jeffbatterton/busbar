@@ -1,30 +1,40 @@
+import AppKit
 import SwiftUI
 
 @main
 struct BusbarApp: App {
-    @State private var settings: AppSettings
-    @State private var monitor: Monitor
-
-    init() {
-        let settings = AppSettings()
-        let monitor = Monitor(settings: settings)
-        monitor.start()
-        _settings = State(initialValue: settings)
-        _monitor = State(initialValue: monitor)
-    }
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
     var body: some Scene {
-        MenuBarExtra {
-            DropdownView(monitor: monitor)
-        } label: {
-            MenuBarLabel(monitor: monitor)
-        }
-        .menuBarExtraStyle(.window)
+        // The menu bar item and settings window are AppKit-managed (see AppDelegate);
+        // SwiftUI requires at least one scene.
+        Settings { EmptyView() }
+    }
+}
 
-        Window("Busbar Settings", id: "settings") {
-            SettingsView(settings: settings, monitor: monitor)
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let settings = AppSettings()
+    private lazy var monitor = Monitor(settings: settings)
+    private var statusItem: StatusItemController?
+    private var settingsWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        statusItem = StatusItemController(monitor: monitor) { [weak self] in self?.showSettings() }
+        monitor.start()
+    }
+
+    private func showSettings() {
+        if settingsWindow == nil {
+            let window = NSWindow(contentViewController: NSHostingController(
+                rootView: SettingsView(settings: settings, monitor: monitor)))
+            window.title = "Busbar Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
         }
-        .windowResizability(.contentSize)
-        .defaultLaunchBehavior(.suppressed)
+        NSApp.activate()
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 }

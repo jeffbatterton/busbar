@@ -33,7 +33,7 @@ struct SettingsView: View {
             }
 
             Section("Battery alerts") {
-                threshold("Low", value: $settings.lowThreshold, range: 5...80, color: .orange)
+                threshold("Low", value: $settings.lowThreshold, range: 5...80, color: .yellow)
                 threshold("Critical", value: $settings.criticalThreshold, range: 1...79, color: .red)
                 Toggle("Notify when battery is low", isOn: $settings.notifyBattery)
                 Toggle("Notify about faults and warnings", isOn: $settings.notifyWarnings)

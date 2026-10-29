@@ -3,7 +3,7 @@ import SwiftUI
 
 struct DropdownView: View {
     let monitor: Monitor
-    @Environment(\.openWindow) private var openWindow
+    let openSettings: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -50,9 +50,7 @@ struct DropdownView: View {
                     }
                 }
             }
-            Gauge(value: s.stateOfCharge, in: 0...100) { EmptyView() }
-                .gaugeStyle(.accessoryLinearCapacity)
-                .tint(levelColor)
+            ChargeBar(level: s.stateOfCharge / 100, color: levelColor)
         }
     }
 
@@ -154,8 +152,7 @@ struct DropdownView: View {
                 .help("Refresh now")
                 .disabled(monitor.isRefreshing)
             Button {
-                openWindow(id: "settings")
-                NSApp.activate()
+                openSettings()
             } label: { Image(systemName: "gearshape") }
                 .help("Settings")
             Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
@@ -174,7 +171,7 @@ struct DropdownView: View {
     private var levelColor: Color {
         switch monitor.batteryLevel {
         case .normal: .green
-        case .low: .orange
+        case .low: .yellow
         case .critical: .red
         }
     }
@@ -221,8 +218,34 @@ private struct StatusIcon: View {
     var body: some View {
         Image(systemName: name)
             .foregroundStyle(lit ?? .secondary)
-            .shadow(color: (lit ?? .clear).opacity(0.7), radius: 2)
-            .shadow(color: (lit ?? .clear).opacity(0.4), radius: 5)
+            .glow(lit ?? .clear)
             .frame(width: 18)
+    }
+}
+
+/// The battery level bar under the percentage, lit in the level color.
+private struct ChargeBar: View {
+    let level: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.quaternary)
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(geometry.size.height, geometry.size.width * min(1, max(0, level))))
+                    .glow(color, intensity: 0.5)
+            }
+        }
+        .frame(height: 6)
+    }
+}
+
+extension View {
+    /// A soft two-layer glow in `color`, so the view looks lit up.
+    func glow(_ color: Color, intensity: Double = 1) -> some View {
+        shadow(color: color.opacity(0.7 * intensity), radius: 2)
+            .shadow(color: color.opacity(0.4 * intensity), radius: 5)
     }
 }

@@ -2,42 +2,54 @@ import AppKit
 import BusbarCore
 import SwiftUI
 
-/// The bus battery icon, percentage, and charge direction arrow shown in the menu bar.
+/// Renders the menu bar label: bus battery icon, percentage, charge direction arrow,
+/// and a status dot when something needs attention.
 ///
-/// Menu bar labels are rendered as monochrome templates, so to show orange/red for
-/// low/critical we render the label to a non-template image ourselves.
-struct MenuBarLabel: View {
-    let monitor: Monitor
-
-    var body: some View {
-        Image(nsImage: Self.render(level: level, text: text, flow: monitor.snapshot?.flow, color: color))
-    }
-
-    private var level: Double {
-        (monitor.snapshot?.stateOfCharge ?? 0) / 100
-    }
-
-    private var text: String {
-        guard let snapshot = monitor.snapshot else { return "–" }
-        return "\(Int(snapshot.stateOfCharge.rounded()))%"
-    }
-
-    /// nil means "use the system menu bar color".
-    private var color: NSColor? {
-        if monitor.isStale { return .secondaryLabelColor }
-        return switch monitor.batteryLevel {
-        case .normal: nil
-        case .low: .systemOrange
-        case .critical: .systemRed
+/// With nothing to flag, the label is a template image so macOS tints it to match
+/// the menu bar exactly. Colored states (low/critical, dot, stale) can't be templates,
+/// so their colors are resolved against the menu bar's actual appearance.
+enum MenuBarLabel {
+    @MainActor
+    static func image(for monitor: Monitor, appearance: NSAppearance) -> NSImage {
+        let snapshot = monitor.snapshot
+        let tint: NSColor? = monitor.isStale ? .secondaryLabelColor : nil
+        // Like the system battery: only the charge fill takes the level color.
+        let fill: NSColor? = if monitor.isStale {
+            nil
+        } else {
+            switch monitor.batteryLevel {
+            case .normal: nil
+            case .low: .systemYellow
+            case .critical: .systemRed
+            }
         }
+        // Low/critical battery is already shown by the label color, so the dot is
+        // reserved for problems: unavailable battery, faults, offline, API errors.
+        let dot: NSColor? = monitor.hasProblem ? .systemRed : nil
+        return render(level: (snapshot?.stateOfCharge ?? 0) / 100,
+                      text: snapshot.map { "\(Int($0.stateOfCharge.rounded()))%" } ?? "–",
+                      flow: snapshot?.flow, tint: tint, fill: fill, dot: dot, appearance: appearance)
     }
 
     @MainActor
-    static func render(level: Double, text: String, flow: PowerSnapshot.Flow?, color: NSColor?) -> NSImage {
-        let tint = Color(nsColor: color ?? .black)
+    static func render(level: Double, text: String, flow: PowerSnapshot.Flow?,
+                       tint: NSColor?, fill: NSColor?, dot: NSColor?, appearance: NSAppearance) -> NSImage {
+        let isTemplate = tint == nil && fill == nil && dot == nil
+        let foreground = isTemplate ? Color.black : resolve(tint ?? .labelColor, in: appearance)
+        let fillColor = fill.map { resolve($0, in: appearance) }
+        let dotColor = dot.map { resolve($0, in: appearance) }
+
         let content = HStack(spacing: 4) {
-            BusBatteryIcon(level: level, color: tint)
-                .frame(height: 14)
+            ZStack(alignment: .topTrailing) {
+                BusBatteryIcon(level: level, color: foreground, fillColor: fillColor)
+                if let dotColor {
+                    // Cut a ring out of the icon so the dot reads even on a same-colored label.
+                    Circle().frame(width: 9, height: 9).offset(x: 2.5, y: -2.5).blendMode(.destinationOut)
+                    Circle().fill(dotColor).frame(width: 6, height: 6).offset(x: 1, y: -1)
+                }
+            }
+            .compositingGroup()
+            .frame(height: 14)
             HStack(spacing: 1) {
                 Text(text)
                     .font(.system(size: 13, weight: .medium))
@@ -49,14 +61,24 @@ struct MenuBarLabel: View {
                 }
             }
         }
-        .foregroundStyle(tint)
+        .foregroundStyle(foreground)
+        // Room for the dot, which overhangs the top of the icon.
+        .padding(.top, 2)
         .fixedSize()
 
         let renderer = ImageRenderer(content: content)
         renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
         let image = renderer.nsImage ?? NSImage()
-        // Template images get tinted by the system to match the menu bar.
-        image.isTemplate = color == nil
+        image.isTemplate = isTemplate
         return image
+    }
+
+    /// Resolves a dynamic system color (e.g. labelColor) for a specific appearance.
+    private static func resolve(_ color: NSColor, in appearance: NSAppearance) -> Color {
+        var resolved = color
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB) ?? color
+        }
+        return Color(nsColor: resolved)
     }
 }

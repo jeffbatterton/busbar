@@ -35,6 +35,14 @@ final class Monitor {
         return .of(snapshot.stateOfCharge, settings: settings.alertSettings)
     }
 
+    /// Something needs attention beyond the battery level: an unavailable battery,
+    /// a fault or warning, the bus going quiet, or an EcoFlow error.
+    var hasProblem: Bool {
+        if isStale || lastError != nil { return true }
+        guard let snapshot else { return false }
+        return !snapshot.warnings.isEmpty || snapshot.batteries.contains { !$0.isAvailable }
+    }
+
     var isStale: Bool {
         guard let lastUpdate else { return lastError != nil }
         return Date.now.timeIntervalSince(lastUpdate) >= TimeInterval(settings.offlineMinutes * 60)

@@ -9,6 +9,8 @@ struct BusBatteryIcon: View {
     /// 0–1
     var level: Double
     var color: Color
+    /// Color of the charge fill; defaults to `color`.
+    var fillColor: Color? = nil
 
     static let aspectRatio = Geometry.bounds.width / Geometry.bounds.height
 
@@ -56,7 +58,7 @@ struct BusBatteryIcon: View {
             let radius = max(6, g.bodyRadius - inset * 0.6)
             let fill = CGRect(x: inner.minX, y: inner.minY,
                               width: max(radius * 2, inner.width * clamped), height: inner.height)
-            context.fill(Path(roundedRect: fill, cornerRadius: radius), with: shading)
+            context.fill(Path(roundedRect: fill, cornerRadius: radius), with: .color(fillColor ?? color))
         }
         .aspectRatio(Self.aspectRatio, contentMode: .fit)
     }
