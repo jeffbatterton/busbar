@@ -13,6 +13,8 @@ public struct PowerSnapshot: Sendable, Equatable {
         public var stateOfCharge: Double?
         /// Degrees Celsius, as reported by EcoFlow.
         public var temperature: Double?
+        /// False when the pack is reported but offline or disconnected.
+        public var isAvailable: Bool
     }
 
     /// Combined state of charge across all packs, 0–100.
@@ -28,6 +30,9 @@ public struct PowerSnapshot: Sendable, Equatable {
 
     public var acOutWatts: Int
     public var dc12VOutWatts: Int
+    /// Whether each output is switched on, regardless of whether anything is drawing power.
+    public var acOutputOn: Bool
+    public var dc12VOutputOn: Bool
 
     public var shorePowerConnected: Bool
     public var minutesToFull: Int?
@@ -61,6 +66,9 @@ extension PowerSnapshot {
 
         acOutWatts = q.int("inv.outputWatts") ?? 0
         dc12VOutWatts = (q.int("pd.carWatts") ?? 0) + (q.int("mppt.dcdc12vWatts") ?? 0)
+        // Prefer the switch states; fall back to "drawing power" if they aren't reported.
+        acOutputOn = q.int("inv.cfgAcEnabled") == 1 || acOutWatts > 0
+        dc12VOutputOn = q.int("pd.carState") == 1 || q.int("pd.dcOutState") == 1 || dc12VOutWatts > 0
 
         // inv.acInVol is in millivolts; anything over ~80 V means shore power is present.
         shorePowerConnected = (q["inv.acInVol"] ?? 0) > 80_000
@@ -73,14 +81,20 @@ extension PowerSnapshot {
         minutesToFull = plausibleMinutes("ems.chgRemainTime")
         minutesToEmpty = plausibleMinutes("ems.dsgRemainTime")
 
+        // ems.bmsNOnline bit 0 is the pack's hardware-online signal.
         var batteries = [Battery(name: "Main",
                                  stateOfCharge: q["bmsMaster.f32ShowSoc"] ?? q["bmsMaster.soc"],
-                                 temperature: q["bmsMaster.temp"])]
-        let extraOnline = (q.int("ems.bms1Online") ?? 0) & 1 == 1 || (q.int("pd.ext4p8Port") ?? 0) != 0
-        if extraOnline || q["bmsSlave1.soc"] != nil {
+                                 temperature: q["bmsMaster.temp"],
+                                 isAvailable: q.int("ems.bms0Online").map { $0 & 1 == 1 } ?? true)]
+        let extraSOC = q["bmsSlave1.f32ShowSoc"] ?? q["bmsSlave1.soc"]
+        // Listed whenever the Delta Pro reports on the extra battery port, so a
+        // disconnected pack shows as unavailable rather than disappearing.
+        if q["ems.bms1Online"] != nil || q["pd.ext4p8Port"] != nil || extraSOC != nil {
+            let online = (q.int("ems.bms1Online") ?? 0) & 1 == 1 || (q.int("pd.ext4p8Port") ?? 0) != 0 || extraSOC != nil
             batteries.append(Battery(name: "Extra",
-                                     stateOfCharge: q["bmsSlave1.f32ShowSoc"] ?? q["bmsSlave1.soc"],
-                                     temperature: q["bmsSlave1.temp"]))
+                                     stateOfCharge: online ? extraSOC : nil,
+                                     temperature: online ? q["bmsSlave1.temp"] : nil,
+                                     isAvailable: online))
         }
         self.batteries = batteries
 

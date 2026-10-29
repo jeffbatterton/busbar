@@ -40,7 +40,23 @@ import Testing
         let s = PowerSnapshot(deltaPro: quotas)
         #expect(s.batteries.map(\.name) == ["Main", "Extra"])
         #expect(s.batteries[1].stateOfCharge == nil)
+        #expect(s.batteries.allSatisfy { $0.isAvailable })
         #expect(s.warnings == ["Overload"])
+    }
+}
+
+extension QuotaParsingTests {
+    @Test func disconnectedExtraBatteryIsUnavailable() {
+        let s = PowerSnapshot(deltaPro: Quotas(["ems.bms0Online": 3, "ems.bms1Online": 0]))
+        #expect(s.batteries.map(\.name) == ["Main", "Extra"])
+        #expect(s.batteries.map(\.isAvailable) == [true, false])
+    }
+
+    @Test func outputsOnBySwitchOrDraw() {
+        let switchedOn = PowerSnapshot(deltaPro: Quotas(["inv.cfgAcEnabled": 1, "pd.carState": 0]))
+        #expect(switchedOn.acOutputOn && !switchedOn.dc12VOutputOn)
+        let drawing = PowerSnapshot(deltaPro: Quotas(["mppt.dcdc12vWatts": 40]))
+        #expect(!drawing.acOutputOn && drawing.dc12VOutputOn)
     }
 }
 

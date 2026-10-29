@@ -11,14 +11,16 @@ struct DropdownView: View {
                 header(snapshot)
                 Divider()
                 section("Power in", total: snapshot.wattsIn) {
-                    row("Solar", icon: "sun.max", watts: snapshot.solarWatts)
-                    row("Shore power", icon: "powerplug", watts: snapshot.acInWatts,
-                        detail: snapshot.shorePowerConnected ? "Connected" : nil)
-                    row("Alternator / DC", icon: "car", watts: snapshot.otherInWatts)
+                    inputRow("Solar", icon: "sun.max", watts: snapshot.solarWatts)
+                    inputRow("Shore power", icon: "powerplug", watts: snapshot.acInWatts,
+                             detail: snapshot.shorePowerConnected ? "Connected" : nil)
+                    inputRow("Alternator / DC", icon: "car", watts: snapshot.otherInWatts)
                 }
                 section("Power out", total: snapshot.wattsOut) {
-                    row("AC outlets", icon: "poweroutlet.type.b", watts: snapshot.acOutWatts)
-                    row("12 V", icon: "bolt.car", watts: snapshot.dc12VOutWatts)
+                    outputRow("High voltage", icon: "poweroutlet.type.b",
+                              watts: snapshot.acOutWatts, isOn: snapshot.acOutputOn)
+                    outputRow("Low voltage", icon: "bolt.car",
+                              watts: snapshot.dc12VOutWatts, isOn: snapshot.dc12VOutputOn)
                 }
                 batteries(snapshot)
                 if !snapshot.warnings.isEmpty { warnings(snapshot.warnings) }
@@ -66,9 +68,20 @@ struct DropdownView: View {
         }
     }
 
-    private func row(_ title: String, icon: String, watts value: Int, detail: String? = nil) -> some View {
+    /// Green icon while power is coming in.
+    private func inputRow(_ title: String, icon: String, watts value: Int, detail: String? = nil) -> some View {
+        row(title, icon: icon, iconColor: value > 0 ? .green : .secondary, watts: value, detail: detail)
+    }
+
+    /// Blue icon while the output is switched on, grey when off.
+    private func outputRow(_ title: String, icon: String, watts value: Int, isOn: Bool) -> some View {
+        row(title, icon: icon, iconColor: isOn ? .blue : .secondary, watts: value)
+    }
+
+    private func row(_ title: String, icon: String, iconColor: Color, watts value: Int,
+                     detail: String? = nil) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon).frame(width: 18).foregroundStyle(.secondary)
+            Image(systemName: icon).frame(width: 18).foregroundStyle(iconColor)
             Text(title)
             if let detail {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
@@ -85,13 +98,15 @@ struct DropdownView: View {
             Text("Batteries").font(.subheadline.weight(.semibold))
             ForEach(s.batteries) { battery in
                 HStack(spacing: 8) {
-                    Image(systemName: "minus.plus.batteryblock").frame(width: 18).foregroundStyle(.secondary)
+                    Image(systemName: "minus.plus.batteryblock").frame(width: 18)
+                        .foregroundStyle(battery.isAvailable ? .green : .red)
                     Text(battery.name)
                     Spacer()
                     if let temp = battery.temperature {
                         Text("\(Int((temp * 9 / 5 + 32).rounded()))°F").foregroundStyle(.secondary).monospacedDigit()
                     }
-                    Text(battery.stateOfCharge.map { "\(Int($0.rounded()))%" } ?? "Connected")
+                    Text(batteryValue(battery))
+                        .foregroundStyle(battery.isAvailable ? .primary : .secondary)
                         .monospacedDigit()
                         .frame(minWidth: 44, alignment: .trailing)
                 }
@@ -151,6 +166,11 @@ struct DropdownView: View {
     }
 
     // MARK: Formatting
+
+    private func batteryValue(_ battery: PowerSnapshot.Battery) -> String {
+        guard battery.isAvailable else { return "Unavailable" }
+        return battery.stateOfCharge.map { "\(Int($0.rounded()))%" } ?? "Connected"
+    }
 
     private var levelColor: Color {
         switch monitor.batteryLevel {
