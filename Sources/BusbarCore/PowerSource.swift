@@ -63,7 +63,10 @@ public actor SimulatedDeltaProSource: PowerSource {
         let acOut = 140 + Int.random(in: -20...30) + (Int.random(in: 0..<10) == 0 ? 900 : 0)
         let dc12V = 45 + Int.random(in: 0...15)
         let wattsOut = acOut + dc12V
-        let wattsIn = soc >= 100 ? 0 : solar + alternator
+        // A full battery stops charging. Decide once, before the level updates below.
+        let isFull = soc >= 100
+        let solarIn = isFull ? 0 : solar
+        let wattsIn = isFull ? 0 : solarIn + alternator
 
         if let lastTick {
             let hours = now.timeIntervalSince(lastTick) / 3600 * timeScale
@@ -84,7 +87,7 @@ public actor SimulatedDeltaProSource: PowerSource {
             "ems.bms1Online": extraBatteryConnected ? 3 : 0,
             "pd.wattsInSum": Double(wattsIn),
             "pd.wattsOutSum": Double(wattsOut),
-            "mppt.inWatts": Double(soc >= 100 ? 0 : solar),
+            "mppt.inWatts": Double(solarIn),
             "mppt.xt60ChgType": 1,
             "inv.inputWatts": 0,
             "inv.acInVol": 0,
