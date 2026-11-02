@@ -66,9 +66,9 @@ struct DropdownView: View {
         }
     }
 
-    /// Green icon while power is coming in.
+    /// Yellow icon while power is coming in.
     private func inputRow(_ title: String, icon: String, watts value: Int, detail: String? = nil) -> some View {
-        row(title, icon: icon, lit: value > 0 ? .green : nil, watts: value, detail: detail)
+        row(title, icon: icon, lit: value > 0 ? .powerIn : nil, watts: value, detail: detail)
     }
 
     /// Blue icon while the output is switched on, grey when off.
@@ -240,6 +240,12 @@ private struct ChargeBar: View {
         }
         .frame(height: 6)
     }
+}
+
+extension Color {
+    /// Warm gold for incoming power: as saturated as the system blue and green beside it,
+    /// but warmer than system yellow so it doesn't read as the low-battery warning.
+    static let powerIn = Color(red: 1.0, green: 0.78, blue: 0.24)
 }
 
 extension View {
