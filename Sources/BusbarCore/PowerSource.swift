@@ -93,7 +93,7 @@ public actor SimulatedDeltaProSource: PowerSource {
             "inv.acInVol": 0,
             "inv.outputWatts": Double(acOut),
             "inv.cfgAcEnabled": 1,
-            "pd.carState": 1,
+            "mppt.carState": 1,
             "pd.carWatts": Double(dc12V),
             "ems.chgRemainTime": Double(toFull),
             "ems.dsgRemainTime": Double(toEmpty),

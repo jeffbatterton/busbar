@@ -71,7 +71,8 @@ extension PowerSnapshot {
         dc12VOutWatts = (q.int("pd.carWatts") ?? 0) + (mpptWatts("mppt.dcdc12vWatts") ?? 0)
         // Prefer the switch states; fall back to "drawing power" if they aren't reported.
         acOutputOn = q.int("inv.cfgAcEnabled") == 1 || acOutWatts > 0
-        dc12VOutputOn = q.int("pd.carState") == 1 || q.int("pd.dcOutState") == 1 || dc12VOutWatts > 0
+        // The 12V car port's switch is mppt.carState; pd.carState stays 0 on real units.
+        dc12VOutputOn = q.int("mppt.carState").map { $0 == 1 } ?? (dc12VOutWatts > 0)
 
         // inv.acInVol is in millivolts; anything over ~80 V means shore power is present.
         shorePowerConnected = (q["inv.acInVol"] ?? 0) > 80_000

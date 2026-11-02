@@ -53,8 +53,13 @@ extension QuotaParsingTests {
     }
 
     @Test func outputsOnBySwitchOrDraw() {
-        let switchedOn = PowerSnapshot(deltaPro: Quotas(["inv.cfgAcEnabled": 1, "pd.carState": 0]))
+        let switchedOn = PowerSnapshot(deltaPro: Quotas(["inv.cfgAcEnabled": 1, "mppt.carState": 0]))
         #expect(switchedOn.acOutputOn && !switchedOn.dc12VOutputOn)
+        // A switched-off port stays grey even with stray draw, and pd.* switches are ignored.
+        let off = PowerSnapshot(deltaPro: Quotas(["mppt.carState": 0, "pd.carState": 1, "pd.dcOutState": 1,
+                                                  "mppt.dcdc12vWatts": 23]))
+        #expect(!off.dc12VOutputOn)
+        #expect(PowerSnapshot(deltaPro: Quotas(["mppt.carState": 1])).dc12VOutputOn)
         let drawing = PowerSnapshot(deltaPro: Quotas(["mppt.dcdc12vWatts": 400]))
         #expect(!drawing.acOutputOn && drawing.dc12VOutputOn)
     }
