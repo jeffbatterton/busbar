@@ -57,10 +57,29 @@ public struct PowerSnapshot: Sendable, Equatable {
         }
     }
 
+    /// Switches an output in place. Switching off also drops its draw from the totals,
+    /// since a switched-off output can't be using power.
     public mutating func setOn(_ output: PowerOutput, _ on: Bool) {
         switch output {
         case .ac: acOutputOn = on
         case .dc12V: dc12VOutputOn = on
+        }
+        guard !on else { return }
+        switch output {
+        case .ac: wattsOut -= acOutWatts; acOutWatts = 0
+        case .dc12V: wattsOut -= dc12VOutWatts; dc12VOutWatts = 0
+        }
+    }
+
+    /// Puts an output's switch and draw back as they were in `earlier`.
+    public mutating func restore(_ output: PowerOutput, from earlier: PowerSnapshot) {
+        switch output {
+        case .ac:
+            wattsOut += earlier.acOutWatts - acOutWatts
+            (acOutputOn, acOutWatts) = (earlier.acOutputOn, earlier.acOutWatts)
+        case .dc12V:
+            wattsOut += earlier.dc12VOutWatts - dc12VOutWatts
+            (dc12VOutputOn, dc12VOutWatts) = (earlier.dc12VOutputOn, earlier.dc12VOutWatts)
         }
     }
 }

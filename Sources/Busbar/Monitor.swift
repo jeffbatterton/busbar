@@ -56,20 +56,23 @@ final class Monitor {
         isSimulated ? simulator : EcoFlowDeltaProSource(credentials: settings.credentials)
     }
 
-    /// Switches an output on or off, showing the new state right away.
+    /// Switches an output on or off, showing the new state before the command is sent
+    /// and putting the old one back if it fails.
     func setOutput(_ output: PowerOutput, on: Bool) {
-        guard !switchingOutputs.contains(output) else { return }
+        guard !switchingOutputs.contains(output), let before = snapshot else { return }
         switchingOutputs.insert(output)
+        expectedOutputs[output] = (on, .now.addingTimeInterval(20))
+        snapshot?.setOn(output, on)
         Task {
             defer { switchingOutputs.remove(output) }
             do {
                 try await source.setOutput(output, on: on)
-                expectedOutputs[output] = (on, .now.addingTimeInterval(20))
-                snapshot?.setOn(output, on)
                 lastError = nil
                 try? await Task.sleep(for: .seconds(3))
                 refreshNow()
             } catch {
+                expectedOutputs[output] = nil
+                snapshot?.restore(output, from: before)
                 lastError = "Couldn't switch \(on ? "on" : "off"): \(error.localizedDescription)"
             }
         }

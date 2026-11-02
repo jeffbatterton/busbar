@@ -65,6 +65,18 @@ extension QuotaParsingTests {
     }
 }
 
+extension QuotaParsingTests {
+    @Test func switchingOffDropsDrawAndRestoreBringsItBack() {
+        let before = PowerSnapshot(deltaPro: Quotas(["inv.cfgAcEnabled": 1, "inv.outputWatts": 300,
+                                                     "pd.carWatts": 40, "pd.wattsOutSum": 340]))
+        var s = before
+        s.setOn(.ac, false)
+        #expect(!s.acOutputOn && s.acOutWatts == 0 && s.wattsOut == 40)
+        s.restore(.ac, from: before)
+        #expect(s == before)
+    }
+}
+
 @Suite struct SigningTests {
     @Test func signatureMatchesReferenceImplementation() {
         // Reference: hmac.new(b"secret", b"sn=DCABZ123&accessKey=AK&nonce=345164&timestamp=1681872798000", sha256)

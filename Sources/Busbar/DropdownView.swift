@@ -256,7 +256,6 @@ private struct ToggleIcon: View {
             .onHover { isHovered = $0 }
             .pointerStyle(action.isBusy ? nil : .link)
             .animation(.easeOut(duration: 0.12), value: isHovered)
-            .opacity(action.isBusy ? 0.5 : 1)
             .disabled(action.isBusy)
             .help(action.help)
             .accessibilityLabel(action.help)
