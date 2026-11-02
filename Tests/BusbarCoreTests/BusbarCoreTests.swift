@@ -8,7 +8,7 @@ import Testing
         "ems.f32LcdShowSoc": "64.5",
         "pd.wattsInSum": "900",
         "pd.wattsOutSum": "300",
-        "mppt.inWatts": "400",
+        "mppt.inWatts": "4000",   // tenths of a watt
         "mppt.xt60ChgType": "1",
         "inv.inputWatts": "0",
         "inv.acInVol": "0",
@@ -55,7 +55,7 @@ extension QuotaParsingTests {
     @Test func outputsOnBySwitchOrDraw() {
         let switchedOn = PowerSnapshot(deltaPro: Quotas(["inv.cfgAcEnabled": 1, "pd.carState": 0]))
         #expect(switchedOn.acOutputOn && !switchedOn.dc12VOutputOn)
-        let drawing = PowerSnapshot(deltaPro: Quotas(["mppt.dcdc12vWatts": 40]))
+        let drawing = PowerSnapshot(deltaPro: Quotas(["mppt.dcdc12vWatts": 400]))
         #expect(!drawing.acOutputOn && drawing.dc12VOutputOn)
     }
 }

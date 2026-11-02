@@ -87,7 +87,7 @@ public actor SimulatedDeltaProSource: PowerSource {
             "ems.bms1Online": extraBatteryConnected ? 3 : 0,
             "pd.wattsInSum": Double(wattsIn),
             "pd.wattsOutSum": Double(wattsOut),
-            "mppt.inWatts": Double(solarIn),
+            "mppt.inWatts": Double(solarIn * 10),   // tenths of a watt
             "mppt.xt60ChgType": 1,
             "inv.inputWatts": 0,
             "inv.acInVol": 0,

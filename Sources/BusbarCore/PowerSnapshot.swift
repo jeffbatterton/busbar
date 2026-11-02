@@ -59,13 +59,16 @@ extension PowerSnapshot {
         wattsIn = q.int("pd.wattsInSum") ?? 0
         wattsOut = q.int("pd.wattsOutSum") ?? 0
 
+        // The mppt.*Watts fields are in tenths of a watt; the rest are whole watts.
+        func mpptWatts(_ key: String) -> Int? { q[key].map { Int(($0 / 10).rounded()) } }
+
         // The XT60 port is solar unless it's detected as a DC adapter.
-        solarWatts = q.int("mppt.xt60ChgType") == 2 ? 0 : (q.int("mppt.inWatts") ?? 0)
+        solarWatts = q.int("mppt.xt60ChgType") == 2 ? 0 : (mpptWatts("mppt.inWatts") ?? 0)
         acInWatts = q.int("inv.inputWatts") ?? 0
         otherInWatts = max(0, wattsIn - solarWatts - acInWatts)
 
         acOutWatts = q.int("inv.outputWatts") ?? 0
-        dc12VOutWatts = (q.int("pd.carWatts") ?? 0) + (q.int("mppt.dcdc12vWatts") ?? 0)
+        dc12VOutWatts = (q.int("pd.carWatts") ?? 0) + (mpptWatts("mppt.dcdc12vWatts") ?? 0)
         // Prefer the switch states; fall back to "drawing power" if they aren't reported.
         acOutputOn = q.int("inv.cfgAcEnabled") == 1 || acOutWatts > 0
         dc12VOutputOn = q.int("pd.carState") == 1 || q.int("pd.dcOutState") == 1 || dc12VOutWatts > 0
