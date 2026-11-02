@@ -99,6 +99,10 @@ public actor SimulatedDeltaProSource: PowerSource {
         lastTick = now
 
         let net = Double(wattsIn - wattsOut)
+        // The packs balance through the main: the extra feeds it while discharging,
+        // and it tops up the extra while charging. The Delta Pro counts the extra's
+        // output in its total input.
+        let toExtra = extraBatteryConnected ? Int(net / 2) : 0
         let toFull = net > 0 ? Int((100 - soc) / 100 * capacityWh / net * 60) : 5999
         let toEmpty = net < 0 ? Int(soc / 100 * capacityWh / -net * 60) : 5999
 
@@ -109,7 +113,7 @@ public actor SimulatedDeltaProSource: PowerSource {
             "bmsMaster.temp": 27,
             "ems.bms0Online": 3,
             "ems.bms1Online": extraBatteryConnected ? 3 : 0,
-            "pd.wattsInSum": Double(wattsIn),
+            "pd.wattsInSum": Double(wattsIn + max(0, -toExtra)),
             "pd.wattsOutSum": Double(wattsOut),
             "mppt.inWatts": Double(solarIn * 10),   // tenths of a watt
             "mppt.xt60ChgType": 1,
@@ -123,7 +127,9 @@ public actor SimulatedDeltaProSource: PowerSource {
             "ems.dsgRemainTime": Double(toEmpty),
         ])
         if extraBatteryConnected {
-            quotas.merge(Quotas(["bmsSlave1.f32ShowSoc": max(0, soc - 1.5), "bmsSlave1.temp": 26]))
+            quotas.merge(Quotas(["bmsSlave1.f32ShowSoc": max(0, soc - 1.5), "bmsSlave1.temp": 26,
+                                 "bmsSlave1.outputWatts": Double(max(0, -toExtra)),
+                                 "bmsSlave1.inputWatts": Double(max(0, toExtra))]))
         }
         return quotas
     }

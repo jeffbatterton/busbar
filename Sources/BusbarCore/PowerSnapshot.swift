@@ -19,6 +19,8 @@ public struct PowerSnapshot: Sendable, Equatable {
 
     /// Combined state of charge across all packs, 0–100.
     public var stateOfCharge: Double
+    /// Power coming in from outside the system: solar, AC and other input added up.
+    /// Excludes the extra battery feeding the main pack, which is only a transfer.
     public var wattsIn: Int
     public var wattsOut: Int
 
@@ -27,6 +29,10 @@ public struct PowerSnapshot: Sendable, Equatable {
     /// Input not accounted for by solar or AC. On this bus that's the alternator charger,
     /// which plugs into the extra battery port and isn't reported separately.
     public var otherInWatts: Int
+    /// Power moving between the packs: positive while the extra battery feeds the main,
+    /// negative while the main charges the extra. Zero when under 10 W, so balancing
+    /// trickles don't flicker on and off.
+    public var packTransferWatts: Int
 
     public var acOutWatts: Int
     public var dc12VOutWatts: Int
@@ -98,7 +104,15 @@ extension PowerSnapshot {
         // The XT60 port is solar unless it's detected as a DC adapter.
         solarWatts = q.int("mppt.xt60ChgType") == 2 ? 0 : (mpptWatts("mppt.inWatts") ?? 0)
         acInWatts = q.int("inv.inputWatts") ?? 0
-        otherInWatts = max(0, wattsIn - solarWatts - acInWatts)
+        // The extra battery discharging into the Delta Pro is counted in wattsInSum.
+        let extraBatteryWatts = q.int("bmsSlave1.outputWatts") ?? 0
+        let transfer = extraBatteryWatts - (q.int("bmsSlave1.inputWatts") ?? 0)
+        packTransferWatts = abs(transfer) < 10 ? 0 : transfer
+        let unexplained = wattsIn - solarWatts - acInWatts - extraBatteryWatts
+        // Separately measured readings rarely match, and the extra battery's lags a little;
+        // under 25 W left over is noise (the alternator charger runs in the hundreds).
+        otherInWatts = unexplained < 25 ? 0 : unexplained
+        wattsIn = solarWatts + acInWatts + otherInWatts
 
         acOutWatts = q.int("inv.outputWatts") ?? 0
         dc12VOutWatts = (q.int("pd.carWatts") ?? 0) + (mpptWatts("mppt.dcdc12vWatts") ?? 0)

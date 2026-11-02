@@ -36,6 +36,32 @@ import Testing
         #expect(!s.shorePowerConnected)
     }
 
+    @Test func extraBatteryDischargeIsNotOtherInput() {
+        // Real reading: 427 W in, 393 W solar, extra battery discharging 37 W, engine off.
+        let s = PowerSnapshot(deltaPro: Quotas(["pd.wattsInSum": 427, "mppt.inWatts": 3930,
+                                                "bmsSlave1.outputWatts": 37]))
+        #expect(s.otherInWatts == 0)
+        let noise = PowerSnapshot(deltaPro: Quotas(["pd.wattsInSum": 570, "mppt.inWatts": 5680]))
+        #expect(noise.otherInWatts == 0)
+    }
+
+    @Test func extraBatteryDischargeIsNotInput() {
+        // Nothing plugged in; the extra battery is topping up the main pack.
+        let s = PowerSnapshot(deltaPro: Quotas(["pd.wattsInSum": 208, "pd.wattsOutSum": 407,
+                                                "bmsSlave1.outputWatts": 208]))
+        #expect(s.wattsIn == 0)
+        #expect(s.flow == .discharging)
+    }
+
+    @Test func packTransferDirection() {
+        let feeding = PowerSnapshot(deltaPro: Quotas(["bmsSlave1.outputWatts": 208]))
+        #expect(feeding.packTransferWatts == 208)
+        let charging = PowerSnapshot(deltaPro: Quotas(["bmsSlave1.inputWatts": 186]))
+        #expect(charging.packTransferWatts == -186)
+        let trickle = PowerSnapshot(deltaPro: Quotas(["bmsSlave1.outputWatts": 6]))
+        #expect(trickle.packTransferWatts == 0)
+    }
+
     @Test func detectsExtraBatteryAndWarnings() {
         let s = PowerSnapshot(deltaPro: quotas)
         #expect(s.batteries.map(\.name) == ["Main", "Extra"])

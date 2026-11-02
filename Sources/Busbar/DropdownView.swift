@@ -5,6 +5,10 @@ struct DropdownView: View {
     let monitor: Monitor
     let openSettings: () -> Void
 
+    /// Rows are a fixed height with roomy gaps, so the lists read relaxed rather than packed.
+    static let rowHeight: CGFloat = 20
+    static let rowSpacing: CGFloat = 6
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let snapshot = monitor.snapshot {
@@ -30,8 +34,10 @@ struct DropdownView: View {
             Divider()
             footer
         }
-        .padding(16)
-        .frame(width: 300)
+        // Wide side margins leave room for the pack transfer bracket left of the battery icons.
+        .padding(.vertical, 16)
+        .padding(.horizontal, 22)
+        .frame(width: 312)
     }
 
     // MARK: Sections
@@ -56,7 +62,7 @@ struct DropdownView: View {
 
     private func section<Content: View>(_ title: String, total: Int,
                                         @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Self.rowSpacing) {
             HStack {
                 Text(title).font(.subheadline.weight(.semibold))
                 Spacer()
@@ -98,27 +104,59 @@ struct DropdownView: View {
                 .foregroundStyle(value == 0 ? .tertiary : .primary)
         }
         .font(.callout)
+        .frame(height: Self.rowHeight)
     }
 
     private func batteries(_ s: PowerSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Main is first and Extra second; the transfer only shows while both are online.
+        let transfer = s.batteries.count == 2 && s.batteries.allSatisfy(\.isAvailable) ? s.packTransferWatts : 0
+        let sender = transfer > 0 ? 1 : 0
+        return VStack(alignment: .leading, spacing: Self.rowSpacing) {
             Text("Batteries").font(.subheadline.weight(.semibold))
-            ForEach(s.batteries) { battery in
-                HStack(spacing: 8) {
-                    StatusIcon(name: "minus.plus.batteryblock", lit: battery.isAvailable ? .green : .red)
-                    Text(battery.name)
-                    Spacer()
-                    if let temp = battery.temperature {
-                        Text("\(Int((temp * 9 / 5 + 32).rounded()))°F").foregroundStyle(.secondary).monospacedDigit()
+            TimelineView(.animation(paused: transfer == 0)) { context in
+                let pulse = PackTransferPulse(at: context.date)
+                VStack(alignment: .leading, spacing: Self.rowSpacing) {
+                    ForEach(Array(s.batteries.enumerated()), id: \.element.id) { index, battery in
+                        batteryRow(battery,
+                                   sending: transfer != 0 && index == sender ? transfer : nil,
+                                   landingGlow: transfer != 0 && index != sender ? pulse.landingGlow : 0)
                     }
-                    Text(batteryValue(battery))
-                        .foregroundStyle(battery.isAvailable ? .primary : .secondary)
-                        .monospacedDigit()
-                        .frame(minWidth: 44, alignment: .trailing)
                 }
-                .font(.callout)
+                .overlay(alignment: .topLeading) {
+                    if transfer != 0 {
+                        PackTransferBracket(pulse: pulse, downward: transfer < 0)
+                            .frame(width: 12, height: Self.rowHeight + Self.rowSpacing)
+                            .offset(x: -13, y: Self.rowHeight / 2)
+                    }
+                }
             }
         }
+    }
+
+    /// `sending` is the pack transfer when this pack is the one sending it.
+    private func batteryRow(_ battery: PowerSnapshot.Battery, sending: Int?, landingGlow: Double) -> some View {
+        HStack(spacing: 8) {
+            StatusIcon(name: "minus.plus.batteryblock", lit: battery.isAvailable ? .green : .red,
+                       intensity: 1 + landingGlow)
+            Text(battery.name)
+            if let sending {
+                // Extra sits below Main, so the arrow points at the pack receiving the power.
+                Text("\(Image(systemName: sending > 0 ? "arrow.up" : "arrow.down")) \(watts(abs(sending)))")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.green)
+                    .monospacedDigit()
+            }
+            Spacer()
+            if let temp = battery.temperature {
+                Text("\(Int((temp * 9 / 5 + 32).rounded()))°F").foregroundStyle(.secondary).monospacedDigit()
+            }
+            Text(batteryValue(battery))
+                .foregroundStyle(battery.isAvailable ? .primary : .secondary)
+                .monospacedDigit()
+                .frame(minWidth: 44, alignment: .trailing)
+        }
+        .font(.callout)
+        .frame(height: Self.rowHeight)
     }
 
     private func warnings(_ items: [String]) -> some View {
@@ -223,12 +261,66 @@ struct DropdownView: View {
 private struct StatusIcon: View {
     let name: String
     let lit: Color?
+    var intensity: Double = 1
 
     var body: some View {
         Image(systemName: name)
             .foregroundStyle(lit ?? .secondary)
-            .glow(lit ?? .clear)
+            .glow(lit ?? .clear, intensity: intensity)
             .frame(width: 18)
+    }
+}
+
+/// Where the pulse is along the bracket joining the two packs: a short dash that runs
+/// from the sending pack's icon to the receiving pack's, over and over.
+private struct PackTransferPulse {
+    static let period = 1.6
+    static let dash = 0.16
+    /// Runs past 1 by the dash length so the dash slides fully off the end.
+    let progress: Double
+
+    init(at date: Date) {
+        progress = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: Self.period)
+            / Self.period * (1 + Self.dash)
+    }
+
+    /// How much brighter the receiving icon glows, 0–0.8, peaking as the dash lands.
+    var landingGlow: Double { 0.8 * max(0, 1 - abs(progress - 1.06) / 0.12) }
+}
+
+/// A faint green bracket in the left margin, from one pack icon round to the other,
+/// with the pulse running along it in the direction the power is going.
+private struct PackTransferBracket: View {
+    let pulse: PackTransferPulse
+    let downward: Bool
+
+    var body: some View {
+        ZStack {
+            Bracket(downward: downward).stroke(.green.opacity(0.18), lineWidth: 1.5)
+            Bracket(downward: downward)
+                .trim(from: max(0, pulse.progress - PackTransferPulse.dash), to: min(1, pulse.progress))
+                .stroke(.green, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .glow(.green, intensity: 0.8)
+        }
+    }
+
+    /// Runs from the sending end to the receiving end, so trimming moves the dash that way.
+    private struct Bracket: Shape {
+        let downward: Bool
+
+        func path(in rect: CGRect) -> Path {
+            let left = rect.minX + 1.5, radius = 5.0
+            let (from, to) = downward ? (rect.minY, rect.maxY) : (rect.maxY, rect.minY)
+            let step = downward ? radius : -radius
+            var path = Path()
+            path.move(to: CGPoint(x: rect.maxX, y: from))
+            path.addLine(to: CGPoint(x: left + radius, y: from))
+            path.addQuadCurve(to: CGPoint(x: left, y: from + step), control: CGPoint(x: left, y: from))
+            path.addLine(to: CGPoint(x: left, y: to - step))
+            path.addQuadCurve(to: CGPoint(x: left + radius, y: to), control: CGPoint(x: left, y: to))
+            path.addLine(to: CGPoint(x: rect.maxX, y: to))
+            return path
+        }
     }
 }
 
