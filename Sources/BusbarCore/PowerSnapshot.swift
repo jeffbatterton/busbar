@@ -49,6 +49,20 @@ public struct PowerSnapshot: Sendable, Equatable {
     }
 
     public var netWatts: Int { wattsIn - wattsOut }
+
+    public func isOn(_ output: PowerOutput) -> Bool {
+        switch output {
+        case .ac: acOutputOn
+        case .dc12V: dc12VOutputOn
+        }
+    }
+
+    public mutating func setOn(_ output: PowerOutput, _ on: Bool) {
+        switch output {
+        case .ac: acOutputOn = on
+        case .dc12V: dc12VOutputOn = on
+        }
+    }
 }
 
 extension PowerSnapshot {

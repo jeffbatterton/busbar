@@ -17,9 +17,9 @@ struct DropdownView: View {
                     inputRow("Alternator / DC", icon: "car", watts: snapshot.otherInWatts)
                 }
                 section("Power out", total: snapshot.wattsOut) {
-                    outputRow("High voltage", icon: "poweroutlet.type.b",
+                    outputRow("High voltage", icon: "poweroutlet.type.b", output: .ac,
                               watts: snapshot.acOutWatts, isOn: snapshot.acOutputOn)
-                    outputRow("Low voltage", icon: "bolt.car",
+                    outputRow("Low voltage", icon: "bolt.car", output: .dc12V,
                               watts: snapshot.dc12VOutWatts, isOn: snapshot.dc12VOutputOn)
                 }
                 batteries(snapshot)
@@ -71,15 +71,24 @@ struct DropdownView: View {
         row(title, icon: icon, lit: value > 0 ? .powerIn : nil, watts: value, detail: detail)
     }
 
-    /// Blue icon while the output is switched on, grey when off.
-    private func outputRow(_ title: String, icon: String, watts value: Int, isOn: Bool) -> some View {
-        row(title, icon: icon, lit: isOn ? .blue : nil, watts: value)
+    /// Blue icon while the output is switched on, grey when off. Clicking it switches the output.
+    private func outputRow(_ title: String, icon: String, output: PowerOutput, watts value: Int,
+                           isOn: Bool) -> some View {
+        row(title, icon: icon, lit: isOn ? .blue : nil, watts: value,
+            toggle: ToggleAction(help: "Turn \(title.lowercased()) \(isOn ? "off" : "on")",
+                                 isBusy: monitor.switchingOutputs.contains(output)) {
+                monitor.setOutput(output, on: !isOn)
+            })
     }
 
     private func row(_ title: String, icon: String, lit: Color?, watts value: Int,
-                     detail: String? = nil) -> some View {
+                     detail: String? = nil, toggle: ToggleAction? = nil) -> some View {
         HStack(spacing: 8) {
-            StatusIcon(name: icon, lit: lit)
+            if let toggle {
+                ToggleIcon(icon: StatusIcon(name: icon, lit: lit), action: toggle)
+            } else {
+                StatusIcon(name: icon, lit: lit)
+            }
             Text(title)
             if let detail {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
@@ -220,6 +229,37 @@ private struct StatusIcon: View {
             .foregroundStyle(lit ?? .secondary)
             .glow(lit ?? .clear)
             .frame(width: 18)
+    }
+}
+
+struct ToggleAction {
+    let help: String
+    let isBusy: Bool
+    let perform: () -> Void
+}
+
+/// A status icon that switches its output when clicked, with a faint ring on hover.
+private struct ToggleIcon: View {
+    let icon: StatusIcon
+    let action: ToggleAction
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action.perform) { icon }
+            .buttonStyle(.plain)
+            .contentShape(Circle().inset(by: -4))
+            .background {
+                Circle()
+                    .strokeBorder(.primary.opacity(isHovered && !action.isBusy ? 0.2 : 0), lineWidth: 1)
+                    .frame(width: 24, height: 24)
+            }
+            .onHover { isHovered = $0 }
+            .pointerStyle(action.isBusy ? nil : .link)
+            .animation(.easeOut(duration: 0.12), value: isHovered)
+            .opacity(action.isBusy ? 0.5 : 1)
+            .disabled(action.isBusy)
+            .help(action.help)
+            .accessibilityLabel(action.help)
     }
 }
 

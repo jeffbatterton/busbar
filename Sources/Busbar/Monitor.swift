@@ -11,6 +11,10 @@ final class Monitor {
     private(set) var lastUpdate: Date?
     private(set) var lastError: String?
     private(set) var isRefreshing = false
+    /// Outputs with a switch command in flight.
+    private(set) var switchingOutputs: Set<PowerOutput> = []
+    /// States just switched to, shown until the device reports them (it lags a few seconds).
+    private var expectedOutputs: [PowerOutput: (on: Bool, until: Date)] = [:]
 
     let settings: AppSettings
     private var alerts = AlertEngine()
@@ -48,6 +52,29 @@ final class Monitor {
         return Date.now.timeIntervalSince(lastUpdate) >= TimeInterval(settings.offlineMinutes * 60)
     }
 
+    private var source: any PowerSource {
+        isSimulated ? simulator : EcoFlowDeltaProSource(credentials: settings.credentials)
+    }
+
+    /// Switches an output on or off, showing the new state right away.
+    func setOutput(_ output: PowerOutput, on: Bool) {
+        guard !switchingOutputs.contains(output) else { return }
+        switchingOutputs.insert(output)
+        Task {
+            defer { switchingOutputs.remove(output) }
+            do {
+                try await source.setOutput(output, on: on)
+                expectedOutputs[output] = (on, .now.addingTimeInterval(20))
+                snapshot?.setOn(output, on)
+                lastError = nil
+                try? await Task.sleep(for: .seconds(3))
+                refreshNow()
+            } catch {
+                lastError = "Couldn't switch \(on ? "on" : "off"): \(error.localizedDescription)"
+            }
+        }
+    }
+
     /// UNUserNotificationCenter throws if the process isn't an .app bundle (e.g. `swift run`).
     private var notificationsAvailable: Bool { Bundle.main.bundleIdentifier != nil }
 
@@ -80,14 +107,19 @@ final class Monitor {
     }
 
     private func refresh() async {
-        let source: any PowerSource = isSimulated
-            ? simulator
-            : EcoFlowDeltaProSource(credentials: settings.credentials)
+        let source = source
         isRefreshing = true
         defer { isRefreshing = false }
 
         do {
-            let snapshot = try await source.snapshot()
+            var snapshot = try await source.snapshot()
+            for (output, expected) in expectedOutputs {
+                if snapshot.isOn(output) == expected.on || expected.until < .now {
+                    expectedOutputs[output] = nil
+                } else {
+                    snapshot.setOn(output, expected.on)
+                }
+            }
             self.snapshot = snapshot
             lastUpdate = .now
             lastError = nil

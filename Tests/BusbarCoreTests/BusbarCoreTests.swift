@@ -72,6 +72,15 @@ extension QuotaParsingTests {
                                            nonce: "345164", timestamp: "1681872798000")
         #expect(sign == "e7de08da82c96795a52fef3ca276328f80f0fd31c24a4e8e754d85abe45bd592")
     }
+
+    @Test func setCommandSignsFlattenedParamsInKeyOrder() {
+        // Reference: hmac.new(b"secret", b"operateType=TCP&params.enabled=0&params.id=81&sn=DCABZ123&accessKey=AK&nonce=345164&timestamp=1681872798000", sha256)
+        let sign = EcoFlowClient.signature(params: ["sn": "DCABZ123", "operateType": "TCP",
+                                                    "params.id": "81", "params.enabled": "0"],
+                                           accessKey: "AK", secretKey: "secret",
+                                           nonce: "345164", timestamp: "1681872798000")
+        #expect(sign == "bcf456d73671f0b391ec8aa52e17c1ba2a22bf8ddf5fea493e39963c95aae2e2")
+    }
 }
 
 @Suite struct AlertEngineTests {

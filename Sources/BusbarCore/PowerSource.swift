@@ -1,8 +1,14 @@
 import Foundation
 
+/// An output that can be switched on and off remotely.
+public enum PowerOutput: Sendable, Hashable {
+    case ac, dc12V
+}
+
 /// Anything that can produce a snapshot of the electrical system.
 public protocol PowerSource: Sendable {
     func snapshot() async throws -> PowerSnapshot
+    func setOutput(_ output: PowerOutput, on: Bool) async throws
 }
 
 public struct EcoFlowDeltaProSource: PowerSource {
@@ -14,6 +20,15 @@ public struct EcoFlowDeltaProSource: PowerSource {
 
     public func snapshot() async throws -> PowerSnapshot {
         PowerSnapshot(deltaPro: try await client.allQuotas())
+    }
+
+    public func setOutput(_ output: PowerOutput, on: Bool) async throws {
+        // Delta Pro command ids: 66 is AC discharge, 81 the 12V car port.
+        let id = switch output {
+        case .ac: 66
+        case .dc12V: 81
+        }
+        try await client.setQuota(["id": id, "enabled": on ? 1 : 0])
     }
 }
 
@@ -33,6 +48,8 @@ public actor SimulatedDeltaProSource: PowerSource {
     private let scenario: Scenario
     private let extraBatteryConnected: Bool
     private var lastTick: Date?
+    private var acOn = true
+    private var dc12VOn = true
     /// Speeds up battery drain/charge so changes are visible while testing.
     private let timeScale: Double
     // Delta Pro (3.6 kWh) + one extra battery (3.6 kWh).
@@ -50,6 +67,13 @@ public actor SimulatedDeltaProSource: PowerSource {
         PowerSnapshot(deltaPro: quotas())
     }
 
+    public func setOutput(_ output: PowerOutput, on: Bool) async throws {
+        switch output {
+        case .ac: acOn = on
+        case .dc12V: dc12VOn = on
+        }
+    }
+
     func quotas(now: Date = .now) -> Quotas {
         let hour = Double(Calendar.current.component(.hour, from: now))
             + Double(Calendar.current.component(.minute, from: now)) / 60
@@ -60,8 +84,8 @@ public actor SimulatedDeltaProSource: PowerSource {
         let alternator = scenario == .charging ? 780 + Int.random(in: -20...15) : 0
 
         // Loads: fridge and electronics always on, plus an occasional big AC load.
-        let acOut = 140 + Int.random(in: -20...30) + (Int.random(in: 0..<10) == 0 ? 900 : 0)
-        let dc12V = 45 + Int.random(in: 0...15)
+        let acOut = acOn ? 140 + Int.random(in: -20...30) + (Int.random(in: 0..<10) == 0 ? 900 : 0) : 0
+        let dc12V = dc12VOn ? 45 + Int.random(in: 0...15) : 0
         let wattsOut = acOut + dc12V
         // A full battery stops charging. Decide once, before the level updates below.
         let isFull = soc >= 100
@@ -92,8 +116,8 @@ public actor SimulatedDeltaProSource: PowerSource {
             "inv.inputWatts": 0,
             "inv.acInVol": 0,
             "inv.outputWatts": Double(acOut),
-            "inv.cfgAcEnabled": 1,
-            "mppt.carState": 1,
+            "inv.cfgAcEnabled": acOn ? 1 : 0,
+            "mppt.carState": dc12VOn ? 1 : 0,
             "pd.carWatts": Double(dc12V),
             "ems.chgRemainTime": Double(toFull),
             "ems.dsgRemainTime": Double(toEmpty),

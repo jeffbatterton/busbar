@@ -71,14 +71,32 @@ public struct EcoFlowClient: Sendable {
         }
     }
 
+    /// Sends a set command to the configured device, e.g. `["id": 66, "enabled": 1]`.
+    public func setQuota(_ params: [String: Int]) async throws {
+        let body: [String: Any] = ["sn": credentials.serialNumber, "operateType": "TCP", "params": params]
+        // Nested params are signed flattened, as `params.id=66`.
+        var signed = ["sn": credentials.serialNumber, "operateType": "TCP"]
+        for (key, value) in params { signed["params.\(key)"] = String(value) }
+
+        var request = URLRequest(url: host.appending(path: "/iot-open/sign/device/quota"))
+        request.httpMethod = "PUT"
+        request.setValue("application/json;charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        _ = try await send(request, signing: signed)
+    }
+
     private func get(_ path: String, query: [String: String]) async throws -> Any? {
         var components = URLComponents(url: host.appending(path: path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
             components.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
-        var request = URLRequest(url: components.url!)
+        return try await send(URLRequest(url: components.url!), signing: query)
+    }
+
+    private func send(_ request: URLRequest, signing params: [String: String]) async throws -> Any? {
+        var request = request
         request.timeoutInterval = 20
-        for (field, value) in Self.signedHeaders(params: query, credentials: credentials) {
+        for (field, value) in Self.signedHeaders(params: params, credentials: credentials) {
             request.setValue(value, forHTTPHeaderField: field)
         }
 
