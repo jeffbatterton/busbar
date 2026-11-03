@@ -11,6 +11,10 @@ final class Monitor {
     private(set) var lastUpdate: Date?
     private(set) var lastError: String?
     private(set) var isRefreshing = false
+    /// This week's readings from the history logger; empty when it isn't set up.
+    private(set) var history = ChargeHistory()
+    /// Set when the logger can't be reached and there's nothing to show.
+    private(set) var historyError: String?
     /// Outputs with a switch command in flight.
     private(set) var switchingOutputs: Set<PowerOutput> = []
     /// States just switched to, shown until the device reports them (it lags a few seconds).
@@ -93,6 +97,13 @@ final class Monitor {
         restartLoop()
     }
 
+    /// Forgets fetched history and refetches, e.g. after the logger settings change.
+    func resetHistory() {
+        history = ChargeHistory()
+        historyError = nil
+        refreshNow()
+    }
+
     /// Refresh immediately and restart the polling timer (e.g. after settings change).
     func refreshNow() {
         restartLoop()
@@ -135,6 +146,28 @@ final class Monitor {
 
         if let alert = alerts.checkStaleness(lastUpdate: lastUpdate, settings: settings.alertSettings) {
             notify([alert])
+        }
+        await refreshHistory()
+    }
+
+    /// Fetches only the readings since the last one, keeping this calendar week's.
+    private func refreshHistory() async {
+        guard let client = settings.historyClient else {
+            history = ChargeHistory()
+            historyError = nil
+            return
+        }
+        let weekStart = HistoryRange.week.window(containing: .now).start
+        history.trim(before: weekStart)
+        do {
+            history.append(try await client.readings(since: history.nextFetch(from: weekStart)))
+            historyError = nil
+        } catch is CancellationError {
+            return
+        } catch let error as URLError where error.code == .cancelled {
+            return
+        } catch {
+            historyError = error.localizedDescription
         }
     }
 

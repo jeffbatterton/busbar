@@ -52,12 +52,18 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 /* 16px stops iOS zooming into the field. */
 .field input { width: 100%; background: none; border: 0; outline: 0; padding: 0; color: var(--text);
                font: 16px ui-monospace, Menlo, monospace; caret-color: var(--out); }
+.field input::placeholder { color: var(--muted); }
 .help { font-size: 13px; color: var(--text-2); margin: -8px 4px 0; }
 .help a { color: var(--out); text-decoration: none; }
+.help code { font: 12px ui-monospace, Menlo, monospace; }
+.group-h { margin: 4px 4px -10px; font-size: 13px; font-weight: 600; color: var(--text-2);
+           text-transform: uppercase; letter-spacing: 0.4px; }
+.group-h span { margin-left: 4px; font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
 .error { color: var(--warn); font-size: 14px; margin: 0 4px; }
 .btn { height: 52px; border-radius: 14px; background: var(--out); color: #fff; font-weight: 600; font-size: 17px; margin-top: 6px; }
 .btn:disabled { opacity: 0.6; }
 .btn.small { height: 40px; padding: 0 22px; border-radius: 12px; font-size: 15px; margin: 0; }
+#setup-cancel { align-self: center; font-size: 15px; }
 .fine { font-size: 12px; color: var(--muted); text-align: center; margin: -6px 10px 0; }
 
 /* Dashboard */
@@ -138,6 +144,25 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 .temp { color: var(--text-2); width: 44px; text-align: right; }
 .pct { min-width: 44px; text-align: right; }
 .unavailable .pct { color: var(--text-2); }
+
+/* Battery history. The chart's colors are set in renderHistory(), to match the Mac app's. */
+#history .card-h { align-items: center; padding-bottom: 8px; }
+.seg { display: flex; padding: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.08);
+       text-transform: none; letter-spacing: 0; }
+.seg button { padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--text-2);
+              transition: background 0.2s, color 0.2s; }
+.seg button.on { background: rgba(255, 255, 255, 0.16); color: var(--text); }
+/* Sideways drags scrub the chart; up and down still scroll the page. */
+.chart { position: relative; padding: 6px 0 12px; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.chart svg { display: block; overflow: visible; }
+.chart text { font-size: 10px; fill: #75746f; font-variant-numeric: tabular-nums; }
+.chart text.today { fill: var(--text-2); }
+.tip { position: absolute; transform: translate(-50%, -100%); padding: 3px 7px; border-radius: 6px;
+       background: rgba(44, 44, 48, 0.96); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+       color: var(--text-2); font-size: 12px; white-space: nowrap; pointer-events: none;
+       font-variant-numeric: tabular-nums; }
+.tip b { color: var(--text); font-weight: 600; }
+.history-error { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
 
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 0 0; }
 .foot .link { font-size: 12px; }

@@ -1,4 +1,6 @@
 import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput } from "./ecoflow.js";
+import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, splitRuns, buckets, chargingBands, isCharging,
+  smooth, simulatedHistory } from "./history.js";
 
 /// Polls while the app is open. It pauses in the background and refreshes on return.
 const POLL_SECONDS = 15;
@@ -7,6 +9,9 @@ const STALE_MINUTES = 10;
 const LOW = 30, CRITICAL = 15;
 const STORAGE_KEY = "busbar.credentials";
 const BASELINE_KEY = "busbar.rawBaseline";
+const HISTORY_KEY = "busbar.history";
+const RANGE_KEY = "busbar.historyRange";
+const HISTORY_URL = "https://busbar-logger.jeffbatterton.workers.dev";
 
 const $ = (selector) => document.querySelector(selector);
 const demo = new URLSearchParams(location.search).has("demo");
@@ -23,6 +28,13 @@ const state = {
   timer: null,
   /// The last raw quotas fetched for the Raw values screen.
   raw: null,
+  /// This week's readings from the logger, or null with no read token set.
+  history: null,
+  /// The chart's range, "day" or "week".
+  range: localStorage.getItem(RANGE_KEY) === "week" ? "week" : "day",
+  /// What the chart was last drawn with, for hovering; and where the pointer is, if over it.
+  chart: null,
+  hoverX: null,
 };
 
 // MARK: Screens
@@ -40,6 +52,15 @@ function savedCredentials() {
   }
 }
 
+/// The history settings as saved: the URL may be blank, meaning the default.
+function savedHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY)) ?? {};
+  } catch {
+    return {};
+  }
+}
+
 async function launch() {
   const credentials = savedCredentials();
   if (!demo && !credentials) return showSetup();
@@ -54,6 +75,7 @@ async function launch() {
     state.error = null;
     render();
     show("dashboard");
+    startHistory();
     schedule();
   } catch (error) {
     $("#launch-message").textContent = error.message;
@@ -67,7 +89,12 @@ function showSetup() {
   const form = $("#setup-form");
   const saved = savedCredentials();
   for (const name of ["accessKey", "secretKey", "serialNumber"]) form.elements[name].value = saved?.[name] ?? "";
+  const history = savedHistory();
+  form.elements.historyUrl.value = history.url ?? "";
+  form.elements.historyToken.value = history.token ?? "";
   $("#setup-error").hidden = true;
+  // Opened from the dashboard's Settings link, there's a connection to go back to.
+  $("#setup-cancel").hidden = !saved && !demo;
   $("#home-tip").hidden = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
   show("setup");
 }
@@ -86,9 +113,13 @@ async function connect(event) {
     const source = new DeltaProSource(credentials);
     state.snapshot = await source.snapshot();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(credentials));
+    const history = { url: form.elements.historyUrl.value.trim(), token: form.elements.historyToken.value.trim() };
+    if (history.token) localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    else localStorage.removeItem(HISTORY_KEY);
     Object.assign(state, { source, lastUpdate: new Date(), error: null });
     render();
     show("dashboard");
+    startHistory();
     schedule();
   } catch (error) {
     $("#setup-error").textContent = error.message;
@@ -102,7 +133,8 @@ async function connect(event) {
 async function disconnect() {
   if (!(await confirmAlert("Disconnect from Delta Pro?", "Disconnect"))) return;
   localStorage.removeItem(STORAGE_KEY);
-  Object.assign(state, { source: null, snapshot: null, lastUpdate: null, error: null });
+  localStorage.removeItem(HISTORY_KEY);
+  Object.assign(state, { source: null, snapshot: null, lastUpdate: null, error: null, history: null });
   state.expected.clear();
   if (demo) history.replaceState(null, "", location.pathname);
   showSetup();
@@ -137,6 +169,7 @@ async function refresh() {
     state.error = error.message;
   }
   render();
+  refreshHistory();
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -230,7 +263,7 @@ function render() {
 
   const soc = Math.round(s.stateOfCharge);
   $("#soc").textContent = `${soc}%`;
-  const level = soc <= CRITICAL ? "#ff453a" : soc <= LOW ? "#ffd60a" : "var(--good)";
+  const level = levelColor(soc);
   $("#bar-fill").style.width = `${Math.min(100, Math.max(0, s.stateOfCharge))}%`;
   $("#bar-fill").style.setProperty("--level", level);
 
@@ -274,7 +307,12 @@ function render() {
   }
 
   renderBatteries(s);
+  renderHistory();
 }
+
+/// The charge bar's color, which the history chart shares. Hex, not var(--good), so SVG
+/// attributes can use it too.
+const levelColor = (soc) => (soc <= CRITICAL ? "#ff453a" : soc <= LOW ? "#ffd60a" : "#30d158");
 
 function renderBatteries(s) {
   // Main is first and Extra second; the transfer only shows while both are online.
@@ -312,6 +350,165 @@ function renderBatteries(s) {
 setInterval(() => {
   if (state.snapshot && !$("#dashboard").hidden) renderStatus();
 }, 5000);
+
+// MARK: Battery history
+
+const CHART_HEIGHT = 76, AXIS_HEIGHT = 16;
+/// The card's background, so dots stand out from the line behind them.
+const PANEL = "#1c1c1f";
+
+/// Starts this week's history, after the first snapshot. The demo makes up a week ending
+/// at its current charge, then adds a reading a minute as the logger would.
+function startHistory() {
+  const { url, token } = savedHistory();
+  state.history = demo ? new HistoryCache({ readings: simulatedHistory(state.snapshot.stateOfCharge) })
+    : token ? new HistoryCache({ url: url || HISTORY_URL, token }) : null;
+  state.hoverX = null;
+  renderHistory();
+  refreshHistory();
+}
+
+/// Rides along with each poll; only readings newer than the last are fetched.
+async function refreshHistory() {
+  const history = state.history;
+  if (!history) return;
+  if (demo && state.snapshot && Date.now() - (history.readings.at(-1)?.[0] ?? 0) >= 60000) {
+    const s = state.snapshot;
+    history.append([[Date.now(), Math.round(s.stateOfCharge * 10) / 10, s.wattsIn, s.wattsOut]]);
+  }
+  await history.refresh();
+  if (history === state.history) renderHistory();
+}
+
+function renderHistory() {
+  const history = state.history;
+  $("#history").hidden = !history;
+  if (!history || !state.snapshot) return;
+  for (const button of document.querySelectorAll("[data-range]")) {
+    button.classList.toggle("on", button.dataset.range === state.range);
+  }
+  // With nothing to draw, a failure says so quietly; while loading the chart is just empty.
+  const failed = history.readings.length === 0 && history.error !== null;
+  $("#history-error").hidden = !failed;
+  $("#chart").hidden = failed;
+  const svg = $("#chart-svg"), width = svg.getBoundingClientRect().width;
+  if (failed || !width) return;
+
+  const range = state.range, H = CHART_HEIGHT, now = Date.now();
+  const { start, end } = windowBounds(range, new Date(now));
+  const x = (t) => ((t - start) / (end - start)) * width;
+  const y = (soc) => H - (Math.min(100, Math.max(0, soc)) / 100) * H;
+  const f = (n) => n.toFixed(1);
+  const hline = (soc, attrs) => `<line x1="0" x2="${f(width)}" y1="${f(y(soc))}" y2="${f(y(soc))}" ${attrs}/>`;
+  const readings = history.readings.filter(([t]) => t >= start && t < end);
+  const latest = history.readings.at(-1);
+  const color = levelColor(state.snapshot.stateOfCharge);
+  const parts = [`<defs><linearGradient id="chart-fill" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="${H}">
+    <stop offset="0" stop-color="${color}" stop-opacity=".24"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>`];
+
+  // Behind everything, gold wherever power was coming in.
+  for (const [from, to] of chargingBands(readings)) {
+    parts.push(`<rect x="${f(x(from))}" y="0" width="${f(x(to) - x(from))}" height="${H}" fill="rgba(255,199,61,.11)"/>`);
+  }
+  parts.push(hline(100, 'stroke="rgba(255,255,255,.07)"'), hline(50, 'stroke="rgba(255,255,255,.07)"'),
+    hline(0, 'stroke="rgba(255,255,255,.16)"'));
+
+  // The axis: quarter days, or a column per weekday with today's brighter.
+  const label = (at, text, anchor = "middle", today = false) =>
+    `<text x="${f(at)}" y="${H + AXIS_HEIGHT - 3}" text-anchor="${anchor}"${today ? ' class="today"' : ""}>${text}</text>`;
+  if (range === "day") {
+    ["12am", "6am", "12pm", "6pm"].forEach((text, i) => parts.push(label((width * i) / 4, text, i ? "middle" : "start")));
+  } else {
+    const days = dayStarts(start, 7);
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((text, i) => {
+      if (i) parts.push(`<line x1="${f(x(days[i]))}" x2="${f(x(days[i]))}" y1="0" y2="${H}" stroke="rgba(255,255,255,.07)"/>`);
+      parts.push(label((x(days[i]) + x(days[i + 1])) / 2, text, "middle", now >= days[i] && now < days[i + 1]));
+    });
+  }
+  parts.push(hline(LOW, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
+
+  // A line per run of readings, with faint dashes across the gaps between them.
+  const lines = splitRuns(readings).map((run) =>
+    buckets(run, BUCKET_MINUTES[range], start, run.at(-1) === latest).map(([t, soc]) => [x(t), y(soc)]));
+  for (const points of lines) {
+    if (points.length < 2) continue;
+    const path = smooth(points);
+    parts.push(`<path d="${path}L${f(points.at(-1)[0])},${H}L${f(points[0][0])},${H}Z" fill="url(#chart-fill)"/>`,
+      `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
+  }
+  for (let i = 1; i < lines.length; i++) {
+    const [x1, y1] = lines[i - 1].at(-1), [x2, y2] = lines[i][0];
+    parts.push(`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="${color}" stroke-opacity=".45"
+      stroke-width="1.5" stroke-dasharray="2 3"/>`);
+  }
+  const dot = `r="4" fill="${color}" stroke="${PANEL}" stroke-width="2"`;
+  if (latest && latest[0] >= start && latest[0] < end) {
+    parts.push(`<circle cx="${f(x(latest[0]))}" cy="${f(y(latest[1]))}" ${dot}/>`);
+  }
+  parts.push(`<g id="chart-hover" visibility="hidden"><line y1="0" y2="${H}" stroke="rgba(255,255,255,.4)"/>
+    <circle ${dot}/></g>`);
+
+  svg.innerHTML = parts.join("");
+  state.chart = { readings, latest, range, width, start, end, x, y };
+  if (state.hoverX === null) $("#chart-tip").hidden = true;
+  else hover(state.hoverX);
+}
+
+/// Snaps to the recorded reading nearest the pointer, which is never past now.
+function hover(px) {
+  const chart = state.chart;
+  if (!chart?.readings.length) return;
+  state.hoverX = px;
+  const t = chart.start + (px / chart.width) * (chart.end - chart.start);
+  let reading = chart.readings[0];
+  for (const r of chart.readings) if (Math.abs(r[0] - t) < Math.abs(reading[0] - t)) reading = r;
+
+  const [time, soc] = reading, cx = chart.x(time), cy = chart.y(soc);
+  const group = $("#chart-hover");
+  group.setAttribute("visibility", "visible");
+  group.querySelector("line").setAttribute("x1", cx);
+  group.querySelector("line").setAttribute("x2", cx);
+  group.querySelector("circle").setAttribute("cx", cx);
+  group.querySelector("circle").setAttribute("cy", cy);
+
+  const date = new Date(time);
+  const at = reading === chart.latest ? "Now"
+    : (chart.range === "week" ? `${date.toLocaleDateString([], { weekday: "short" })} ` : "")
+      + date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const tip = $("#chart-tip");
+  tip.innerHTML = `<b>${Math.round(soc)}%</b> ${at}${isCharging(reading) ? " · charging" : ""}`;
+  tip.hidden = false;
+  // Kept inside the card, however near the edge the reading is.
+  const half = tip.offsetWidth / 2;
+  tip.style.left = `${Math.min(chart.width - half, Math.max(half, cx))}px`;
+  const top = $("#chart-svg").getBoundingClientRect().top - $("#chart").getBoundingClientRect().top;
+  tip.style.top = `${top + cy - 8}px`;
+}
+
+function unhover() {
+  state.hoverX = null;
+  $("#chart-hover")?.setAttribute("visibility", "hidden");
+  $("#chart-tip").hidden = true;
+}
+
+function setUpChart() {
+  const chart = $("#chart");
+  const move = (event) => hover(event.clientX - $("#chart-svg").getBoundingClientRect().left);
+  chart.addEventListener("pointerdown", move);
+  chart.addEventListener("pointermove", move);
+  chart.addEventListener("pointerleave", unhover);
+  chart.addEventListener("pointercancel", unhover);
+  chart.addEventListener("pointerup", (event) => { if (event.pointerType !== "mouse") unhover(); });
+  for (const button of document.querySelectorAll("[data-range]")) {
+    button.addEventListener("click", () => {
+      state.range = button.dataset.range;
+      localStorage.setItem(RANGE_KEY, state.range);
+      renderHistory();
+    });
+  }
+  addEventListener("resize", () => { if (!$("#dashboard").hidden) renderHistory(); });
+}
 
 // MARK: Raw values
 
@@ -428,6 +625,8 @@ function setUpPullToRefresh() {
 $("#setup-form").addEventListener("submit", connect);
 $("#retry").addEventListener("click", launch);
 $("#change-keys").addEventListener("click", showSetup);
+$("#settings").addEventListener("click", showSetup);
+$("#setup-cancel").addEventListener("click", launch);
 $("#disconnect").addEventListener("click", disconnect);
 $("#show-raw").addEventListener("click", showRaw);
 $("#raw-back").addEventListener("click", hideRaw);
@@ -438,4 +637,5 @@ for (const row of document.querySelectorAll("[data-output]")) {
   row.querySelector(".tog").addEventListener("click", () => toggle(row));
 }
 setUpPullToRefresh();
+setUpChart();
 launch();

@@ -102,8 +102,17 @@
     </div>
     <p class="help">Get keys from the <a href="https://developer.ecoflow.com/" target="_blank" rel="noopener">EcoFlow developer portal</a>.
       They're saved on this phone only, and sent nowhere but EcoFlow.</p>
+    <p class="group-h">History <span>Optional</span></p>
+    <div class="group">
+      <label class="field"><small>History URL</small>
+        <input name="historyUrl" type="url" placeholder="https://busbar-logger.jeffbatterton.workers.dev" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="field"><small>Read token</small>
+        <input name="historyToken" type="password" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    </div>
+    <p class="help">The logger's <code>READ_TOKEN</code>, for the battery chart. Leave it blank to hide the chart.</p>
     <p id="setup-error" class="error" hidden></p>
     <button id="connect" class="btn" type="submit">Connect</button>
+    <button id="setup-cancel" class="link" type="button" hidden>Cancel</button>
     <p id="home-tip" class="fine">Tip: Share › Add to Home Screen so it opens like an app.</p>
   </form>
 </section>
@@ -126,6 +135,20 @@
 
     <p id="dash-error" class="error-row" hidden><svg class="ic"><use href="#i-xmark"/></svg><span></span></p>
     <div id="warnings"></div>
+
+    <!-- The charge over today or this week, from the logger. Drawn by renderHistory(). -->
+    <div id="history" class="card" hidden>
+      <div class="card-h">Battery<span class="spacer"></span>
+        <div class="seg" role="group" aria-label="Chart range">
+          <button data-range="day">Today</button><button data-range="week">This week</button>
+        </div>
+      </div>
+      <div id="chart" class="chart">
+        <svg id="chart-svg" width="100%" height="92"></svg>
+        <div id="chart-tip" class="tip" hidden></div>
+      </div>
+      <p id="history-error" class="history-error" hidden>History unavailable</p>
+    </div>
 
     <div class="card">
       <div class="card-h">Power in<span class="spacer"></span><span id="watts-in" class="num"></span></div>
@@ -161,7 +184,7 @@
       </div>
     </div>
 
-    <footer class="foot"><span id="demo-badge" hidden>Sample data · </span>Pull down to refresh · <button id="show-raw" class="link">Raw values</button> · <button id="disconnect" class="link">Disconnect</button></footer>
+    <footer class="foot"><span id="demo-badge" hidden>Sample data · </span>Pull down to refresh · <button id="show-raw" class="link">Raw values</button> · <button id="settings" class="link">Settings</button> · <button id="disconnect" class="link">Disconnect</button></footer>
   </div>
 </section>
 

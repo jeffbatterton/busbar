@@ -12,6 +12,9 @@ final class AppSettings {
     var secretKey: String { didSet { Keychain.set(secretKey, for: "secretKey") } }
     var serialNumber: String { didSet { defaults.set(serialNumber, forKey: "serialNumber") } }
     var useSimulatedData: Bool { didSet { defaults.set(useSimulatedData, forKey: "useSimulatedData") } }
+    var historyURL: String { didSet { defaults.set(historyURL, forKey: "historyURL") } }
+    var historyToken: String { didSet { Keychain.set(historyToken, for: "historyToken") } }
+    var historyRange: HistoryRange { didSet { defaults.set(historyRange.rawValue, forKey: "historyRange") } }
 
     var lowThreshold: Double {
         didSet {
@@ -46,6 +49,7 @@ final class AppSettings {
     init() {
         defaults.register(defaults: [
             "useSimulatedData": true,
+            "historyURL": "https://busbar-logger.jeffbatterton.workers.dev",
             "lowThreshold": 30.0,
             "criticalThreshold": 15.0,
             "pollInterval": 60,
@@ -59,6 +63,9 @@ final class AppSettings {
         secretKey = Keychain.string(for: "secretKey") ?? ""
         serialNumber = defaults.string(forKey: "serialNumber") ?? ""
         useSimulatedData = defaults.bool(forKey: "useSimulatedData")
+        historyURL = defaults.string(forKey: "historyURL") ?? ""
+        historyToken = Keychain.string(for: "historyToken") ?? ""
+        historyRange = defaults.string(forKey: "historyRange").flatMap(HistoryRange.init(rawValue:)) ?? .today
         lowThreshold = defaults.double(forKey: "lowThreshold")
         criticalThreshold = defaults.double(forKey: "criticalThreshold")
         pollInterval = defaults.integer(forKey: "pollInterval")
@@ -74,6 +81,14 @@ final class AppSettings {
         EcoFlowCredentials(accessKey: accessKey.trimmingCharacters(in: .whitespaces),
                            secretKey: secretKey.trimmingCharacters(in: .whitespaces),
                            serialNumber: serialNumber.trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Nil until both the logger's address and its read token are set.
+    var historyClient: HistoryClient? {
+        let token = historyToken.trimmingCharacters(in: .whitespaces)
+        guard !token.isEmpty, let url = URL(string: historyURL.trimmingCharacters(in: .whitespaces)),
+              url.scheme == "https" || url.scheme == "http" else { return nil }
+        return HistoryClient(baseURL: url, token: token)
     }
 
     var alertSettings: AlertSettings {

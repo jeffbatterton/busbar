@@ -49,6 +49,9 @@ npx wrangler secret put ECOFLOW_ACCESS_KEY   # also ECOFLOW_SECRET_KEY, ECOFLOW_
 ```
 
 Without the EcoFlow secrets it records simulated readings; the first real one deletes them.
+Both apps show the history as a Battery chart (Today / This week) once the read token is
+entered: under **Battery history** in the Mac app's Settings, and on the web app's setup
+screen.
 `GET /readings?since=<ms>[&until=<ms>]` with `Authorization: Bearer <READ_TOKEN>` answers
 `{ simulated, readings: [[time ms, charge %, watts in, watts out], …] }`, at most 8 days at
 a time.

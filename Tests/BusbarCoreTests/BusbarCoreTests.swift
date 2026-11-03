@@ -158,3 +158,84 @@ extension QuotaParsingTests {
         #expect(engine.evaluate(snapshot(soc: 70), settings: settings).map(\.title) == ["Bus is back online"])
     }
 }
+
+@Suite struct ChargeHistoryTests {
+    var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Chicago")!
+        return calendar
+    }
+
+    func date(_ day: Int, _ hour: Int, _ minute: Int = 0) -> Date {
+        calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour, minute: minute))!
+    }
+
+    /// One reading a minute from `start`, at a steady charge.
+    func readings(from start: Date, minutes: Int, soc: Double = 50, wattsIn: Int = 0) -> [ChargeReading] {
+        (0..<minutes).map {
+            ChargeReading(time: start.addingTimeInterval(Double($0) * 60), stateOfCharge: soc,
+                          wattsIn: wattsIn, wattsOut: 200)
+        }
+    }
+
+    @Test func windowsAreCalendarDaysAndMondayWeeks() {
+        // Sunday Nov 1 2026 is also the day US daylight saving ends, so it's 25 hours long.
+        let sunday = HistoryRange.today.window(containing: date(1, 15), calendar: calendar)
+        #expect(sunday.start == date(1, 0))
+        #expect(sunday.duration == 25 * 3600)
+        let week = HistoryRange.week.window(containing: date(2, 9), calendar: calendar)
+        #expect(week.start == date(2, 0))  // Monday
+        #expect(week.end == date(9, 0))
+        #expect(HistoryRange.week.window(containing: date(8, 23), calendar: calendar).start == date(2, 0))  // Sunday
+    }
+
+    @Test func splitsRunsAtGapsOverFiveMinutes() {
+        let first = readings(from: date(3, 1), minutes: 10)
+        let second = readings(from: first.last!.time.addingTimeInterval(5 * 60), minutes: 3)
+        let third = readings(from: second.last!.time.addingTimeInterval(6 * 60), minutes: 3)
+        let runs = ChargeHistory.runs(first + second + third)
+        #expect(runs.map(\.count) == [13, 3])
+    }
+
+    @Test func smoothingAveragesBucketsAndEndsOnTheLastReading() {
+        var run = readings(from: date(3, 1), minutes: 25)
+        for index in run.indices { run[index].stateOfCharge = Double(index) }
+        let points = ChargeHistory.smoothed(run, bucket: 10 * 60)
+        #expect(points.count == 3)
+        #expect(points[0].stateOfCharge == 4.5)   // minutes 0–9
+        #expect(points[0].time == date(3, 1, 4).addingTimeInterval(30))
+        #expect(points[2] == ChargePoint(time: run.last!.time, stateOfCharge: 24))
+    }
+
+    @Test func chargingBandsMergeAndDropBlips() {
+        let history = readings(from: date(3, 6), minutes: 30)            // not charging
+            + readings(from: date(3, 6, 30), minutes: 20, wattsIn: 600)  // charging 20 min
+            + readings(from: date(3, 6, 50), minutes: 5)                 // 5 min cloud
+            + readings(from: date(3, 6, 55), minutes: 20, wattsIn: 600)  // charging again
+            + readings(from: date(3, 7, 15), minutes: 60)
+            + readings(from: date(3, 8, 15), minutes: 4, wattsIn: 600)   // a 4 min blip
+            + readings(from: date(3, 8, 19), minutes: 60)
+        let bands = ChargeHistory.chargingBands(history)
+        #expect(bands == [DateInterval(start: date(3, 6, 30), end: date(3, 7, 15))])
+    }
+
+    @Test func historyAppendsOnlyNewerReadingsAndTrims() {
+        var history = ChargeHistory()
+        #expect(history.nextFetch(from: date(2, 0)) == date(2, 0))
+        history.append(readings(from: date(2, 10), minutes: 3))
+        history.append(readings(from: date(2, 10, 1), minutes: 4))  // overlaps by two
+        #expect(history.readings.count == 5)
+        #expect(history.nextFetch(from: date(2, 0)) > date(2, 10, 4))
+        history.trim(before: date(2, 10, 2))
+        #expect(history.readings.first?.time == date(2, 10, 2))
+    }
+
+    @Test func parsesLoggerResponse() throws {
+        let json = #"{"simulated":false,"readings":[[1793733822553,46.8,250,394],[1793733882553,46.8,243,397]]}"#
+        let readings = try HistoryClient.parse(Data(json.utf8))
+        #expect(readings.count == 2)
+        #expect(readings[0] == ChargeReading(time: Date(timeIntervalSince1970: 1793733822.553),
+                                             stateOfCharge: 46.8, wattsIn: 250, wattsOut: 394))
+        #expect(throws: HistoryError.self) { try HistoryClient.parse(Data(#"{"error":"Unauthorized"}"#.utf8)) }
+    }
+}

@@ -14,6 +14,7 @@ struct DropdownView: View {
             if let snapshot = monitor.snapshot {
                 header(snapshot)
                 Divider()
+                if monitor.settings.historyClient != nil { batteryHistory }
                 section("Power in", total: snapshot.wattsIn) {
                     inputRow("Solar", icon: .sunLight, watts: snapshot.solarWatts)
                     inputRow("Shore power", icon: .evPlugCharging, watts: snapshot.acInWatts,
@@ -57,6 +58,32 @@ struct DropdownView: View {
                 }
             }
             ChargeBar(level: s.stateOfCharge / 100, color: levelColor)
+        }
+    }
+
+    /// The charge over today or this week, from the history logger.
+    private var batteryHistory: some View {
+        @Bindable var settings = monitor.settings
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Battery").font(.subheadline.weight(.semibold))
+                Spacer()
+                Picker("Range", selection: $settings.historyRange) {
+                    Text("Today").tag(HistoryRange.today)
+                    Text("This week").tag(HistoryRange.week)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.mini)
+                .fixedSize()
+            }
+            if monitor.history.readings.isEmpty, let error = monitor.historyError {
+                Text("History unavailable: \(error)")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            } else {
+                HistoryChart(history: monitor.history, range: settings.historyRange,
+                             color: levelColor, lowThreshold: settings.lowThreshold)
+            }
         }
     }
 
