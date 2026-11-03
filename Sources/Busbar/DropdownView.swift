@@ -15,15 +15,15 @@ struct DropdownView: View {
                 header(snapshot)
                 Divider()
                 section("Power in", total: snapshot.wattsIn) {
-                    inputRow("Solar", icon: "sun.max", watts: snapshot.solarWatts)
-                    inputRow("Shore power", icon: "powerplug", watts: snapshot.acInWatts,
+                    inputRow("Solar", icon: .sunLight, watts: snapshot.solarWatts)
+                    inputRow("Shore power", icon: .evPlugCharging, watts: snapshot.acInWatts,
                              detail: snapshot.shorePowerConnected ? "Connected" : nil)
-                    inputRow("Alternator / DC", icon: "car", watts: snapshot.otherInWatts)
+                    inputRow("Alternator / DC", icon: .car, watts: snapshot.otherInWatts)
                 }
                 section("Power out", total: snapshot.wattsOut) {
-                    outputRow("High voltage", icon: "poweroutlet.type.b", output: .ac,
+                    outputRow("High voltage", icon: .plugTypeA, output: .ac,
                               watts: snapshot.acOutWatts, isOn: snapshot.acOutputOn)
-                    outputRow("Low voltage", icon: "bolt.car", output: .dc12V,
+                    outputRow("Low voltage", icon: .plugTypeC, output: .dc12V,
                               watts: snapshot.dc12VOutWatts, isOn: snapshot.dc12VOutputOn)
                 }
                 batteries(snapshot)
@@ -73,12 +73,12 @@ struct DropdownView: View {
     }
 
     /// Yellow icon while power is coming in.
-    private func inputRow(_ title: String, icon: String, watts value: Int, detail: String? = nil) -> some View {
+    private func inputRow(_ title: String, icon: Iconoir, watts value: Int, detail: String? = nil) -> some View {
         row(title, icon: icon, lit: value > 0 ? .powerIn : nil, watts: value, detail: detail)
     }
 
     /// Blue icon while the output is switched on, grey when off. Clicking it switches the output.
-    private func outputRow(_ title: String, icon: String, output: PowerOutput, watts value: Int,
+    private func outputRow(_ title: String, icon: Iconoir, output: PowerOutput, watts value: Int,
                            isOn: Bool) -> some View {
         row(title, icon: icon, lit: isOn ? .blue : nil, watts: value,
             toggle: ToggleAction(help: "Turn \(title.lowercased()) \(isOn ? "off" : "on")",
@@ -87,13 +87,13 @@ struct DropdownView: View {
             })
     }
 
-    private func row(_ title: String, icon: String, lit: Color?, watts value: Int,
+    private func row(_ title: String, icon: Iconoir, lit: Color?, watts value: Int,
                      detail: String? = nil, toggle: ToggleAction? = nil) -> some View {
         HStack(spacing: 8) {
             if let toggle {
-                ToggleIcon(icon: StatusIcon(name: icon, lit: lit), action: toggle)
+                ToggleIcon(icon: StatusIcon(icon: icon, lit: lit), action: toggle)
             } else {
-                StatusIcon(name: icon, lit: lit)
+                StatusIcon(icon: icon, lit: lit)
             }
             Text(title)
             if let detail {
@@ -136,15 +136,18 @@ struct DropdownView: View {
     /// `sending` is the pack transfer when this pack is the one sending it.
     private func batteryRow(_ battery: PowerSnapshot.Battery, sending: Int?, landingGlow: Double) -> some View {
         HStack(spacing: 8) {
-            StatusIcon(name: "minus.plus.batteryblock", lit: battery.isAvailable ? .green : .red,
+            StatusIcon(icon: .batteryIndicator, lit: battery.isAvailable ? .green : .red,
                        intensity: 1 + landingGlow)
             Text(battery.name)
             if let sending {
                 // Extra sits below Main, so the arrow points at the pack receiving the power.
-                Text("\(Image(systemName: sending > 0 ? "arrow.up" : "arrow.down")) \(watts(abs(sending)))")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.green)
-                    .monospacedDigit()
+                HStack(spacing: 2) {
+                    (sending > 0 ? Iconoir.dotArrowUp : .dotArrowDown).image(size: 13)
+                    Text(watts(abs(sending)))
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.green)
+                .monospacedDigit()
             }
             Spacer()
             if let temp = battery.temperature {
@@ -162,7 +165,7 @@ struct DropdownView: View {
     private func warnings(_ items: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(items, id: \.self) { item in
-                Label(item, systemImage: "exclamationmark.triangle.fill")
+                Label { Text(item) } icon: { Iconoir.warningTriangleSolid.image(size: 15) }
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
@@ -175,7 +178,7 @@ struct DropdownView: View {
                 ProgressView().controlSize(.small)
                 Text("Connecting to Delta Pro…").foregroundStyle(.secondary)
             } else {
-                Label(monitor.lastError ?? "", systemImage: "exclamationmark.triangle")
+                Label { Text(monitor.lastError ?? "") } icon: { Iconoir.xmarkCircle.image(size: 15) }
                     .foregroundStyle(.orange)
             }
         }
@@ -259,12 +262,12 @@ struct DropdownView: View {
 /// A row icon that looks lit up: drawn in `lit` with a soft glow of the same color,
 /// or plain grey when `lit` is nil.
 private struct StatusIcon: View {
-    let name: String
+    let icon: Iconoir
     let lit: Color?
     var intensity: Double = 1
 
     var body: some View {
-        Image(systemName: name)
+        icon.image(size: 16)
             .foregroundStyle(lit ?? .secondary)
             .glow(lit ?? .clear, intensity: intensity)
             .frame(width: 18)
