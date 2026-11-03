@@ -18,6 +18,21 @@ real Delta Pro field names. Once you have keys, open Settings from the dropdown,
 access key and secret key, click **Test connection** to pick the Delta Pro from your device
 list, and turn off **Use simulated data**.
 
+## Web app
+
+`web/` is the same dashboard for a phone: static files, no build step and no server of
+its own. EcoFlow's API allows cross-origin requests, so the page signs and sends them
+itself. The keys are kept in the browser's local storage on that phone.
+
+```sh
+cd web && python3 -m http.server 8790   # then open http://localhost:8790/?demo
+node --test web/                         # tests for signing and parsing
+swift scripts/make-web-icons.swift       # re-renders the icons and launch images
+```
+
+`?demo` runs on simulated data. On an iPhone, Share › Add to Home Screen opens it
+full-screen with its own icon and launch image.
+
 ## Layout
 
 - `Sources/BusbarCore`: UI-free logic (EcoFlow signing and client, quota parsing, alert

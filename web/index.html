@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0d0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Busbar">
+<meta name="referrer" content="no-referrer">
+<title>Busbar</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<!-- Launch images, one per iPhone screen size (scripts/make-web-icons.swift). -->
+<link rel="apple-touch-startup-image" href="launch/1320x2868.png" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1260x2736.png" media="(device-width: 420px) and (device-height: 912px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1206x2622.png" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="launch/828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="launch/750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<!-- Iconoir icons (iconoir.com, MIT licence), the same set the Mac app uses. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 18C15.3137 18 18 15.3137 18 12C18 8.68629 15.3137 6 12 6C8.68629 6 6 8.68629 6 12C6 15.3137 8.68629 18 12 18Z"/>
+      <path d="M22 12L23 12M12 2V1M12 23V22M20 20L19 19M20 4L19 5M4 20L5 19M4 4L5 5M1 12L2 12"/>
+    </symbol>
+    <symbol id="i-shore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 13.1538V21"/>
+      <path d="M15 8.38452V11.1538C15 12.2583 14.1046 13.1538 13 13.1538H7C5.89543 13.1538 5 12.2583 5 11.1538V8.38452C5 7.27995 5.89543 6.38452 7 6.38452H13C14.1046 6.38452 15 7.27995 15 8.38452Z"/>
+      <path d="M13.3334 6.38462V3M6.66663 6.38462V3M16.6667 16L15 19H19L17.3333 22"/>
+    </symbol>
+    <symbol id="i-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 10L16 10M7 14L8 14M16 14L17 14"/>
+      <path d="M3 18V11.4105C3 11.1397 3.05502 10.8716 3.16171 10.6227L5.4805 5.21216C5.79566 4.47679 6.51874 4 7.31879 4H16.6812C17.4813 4 18.2043 4.47679 18.5195 5.21216L20.8383 10.6227C20.945 10.8716 21 11.1397 21 11.4105V18M3 18V20.4C3 20.7314 3.26863 21 3.6 21H6.4C6.73137 21 7 20.7314 7 20.4V18M3 18H7M21 18V20.4C21 20.7314 20.7314 21 20.4 21H17.6C17.2686 21 17 20.7314 17 20.4V18M21 18H17M7 18H17"/>
+    </symbol>
+    <symbol id="i-plug-a" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
+      <path d="M9 10V14M15 10V14"/>
+    </symbol>
+    <symbol id="i-plug-c" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
+      <path d="M8 14C9.10457 14 10 13.1046 10 12C10 10.8954 9.10457 10 8 10C6.89543 10 6 10.8954 6 12C6 13.1046 6.89543 14 8 14Z"/>
+      <path d="M16 14C17.1046 14 18 13.1046 18 12C18 10.8954 17.1046 10 16 10C14.8954 10 14 10.8954 14 12C14 13.1046 14.8954 14 16 14Z"/>
+    </symbol>
+    <symbol id="i-battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 13H16L18 13M6 13H8M10 13H8M8 13V11M8 13V15"/>
+      <path d="M6 7H2.6C2.26863 7 2 7.26863 2 7.6V18.4C2 18.7314 2.26863 19 2.6 19H21.4C21.7314 19 22 18.7314 22 18.4V7.6C22 7.26863 21.7314 7 21.4 7H18M6 7V5H8V7M6 7H8M8 7H16M16 7V5H18V7M16 7H18"/>
+    </symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22C10.8954 22 10 21.1046 10 20C10 18.8954 10.8954 18 12 18C13.1046 18 14 18.8954 14 20C14 21.1046 13.1046 22 12 22Z"/>
+      <path d="M12 15L12 2M12 2L15 5M12 2L9 5"/>
+    </symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 6C10.8954 6 10 5.10457 10 4C10 2.89543 10.8954 2 12 2C13.1046 2 14 2.89543 14 4C14 5.10457 13.1046 6 12 6Z"/>
+      <path d="M12 9L12 22M12 22L15 19M12 22L9 19"/>
+    </symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24">
+      <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M9.61617 3.6419C10.6736 1.80296 13.3268 1.80296 14.3841 3.6419L22.4271 17.6296C23.4813 19.463 22.1579 21.7504 20.0431 21.7504H3.95721C1.84242 21.7504 0.519055 19.463 1.57322 17.6296L9.61617 3.6419ZM12 8.25C12.4142 8.25 12.75 8.58579 12.75 9V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V9C11.25 8.58579 11.5858 8.25 12 8.25ZM12.5675 17.5008C12.8446 17.1929 12.8196 16.7187 12.5117 16.4416C12.2038 16.1645 11.7296 16.1894 11.4525 16.4973L11.4425 16.5084C11.1654 16.8163 11.1904 17.2905 11.4983 17.5676C11.8062 17.8447 12.2804 17.8197 12.5575 17.5119L12.5675 17.5008Z"/>
+    </symbol>
+    <symbol id="i-xmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9.17218 14.8284L12.0006 12M14.829 9.17157L12.0006 12M12.0006 12L9.17218 9.17157M12.0006 12L14.829 14.8284"/>
+      <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- Launch: drawn to match the launch image, so the hand-off doesn't jump. -->
+<section id="launch" class="screen">
+  <img class="mark" src="logo.png" alt="Busbar">
+  <div class="launch-status">
+    <p id="launch-message"><span class="spin"></span>Connecting to Delta Pro…</p>
+    <div id="launch-actions" class="launch-actions" hidden>
+      <button id="retry" class="btn small">Retry</button>
+      <button id="change-keys" class="link">Change keys</button>
+    </div>
+  </div>
+</section>
+
+<section id="setup" class="screen" hidden>
+  <form id="setup-form" class="setup" autocomplete="off">
+    <img class="setup-logo" src="apple-touch-icon.png" alt="">
+    <h1>Connect your Delta Pro</h1>
+    <p class="lede">Busbar talks to EcoFlow directly from this phone.</p>
+    <div class="group">
+      <label class="field"><small>Access key</small>
+        <input name="accessKey" required autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="field"><small>Secret key</small>
+        <input name="secretKey" type="password" required autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="field"><small>Serial number</small>
+        <input name="serialNumber" required autocapitalize="characters" autocorrect="off" spellcheck="false"></label>
+    </div>
+    <p class="help">Get keys from the <a href="https://developer.ecoflow.com/" target="_blank" rel="noopener">EcoFlow developer portal</a>.
+      They're saved on this phone only, and sent nowhere but EcoFlow.</p>
+    <p id="setup-error" class="error" hidden></p>
+    <button id="connect" class="btn" type="submit">Connect</button>
+    <p id="home-tip" class="fine">Tip: Share › Add to Home Screen so it opens like an app.</p>
+  </form>
+</section>
+
+<section id="dashboard" class="screen" hidden>
+  <div id="pull" class="pull"><span class="spin"></span></div>
+  <div class="content">
+    <header class="top">
+      <span id="dot" class="dot"></span><b>Delta Pro</b><span class="spacer"></span>
+      <span id="updated">Updated just now</span>
+    </header>
+
+    <div class="hero">
+      <div class="row">
+        <span id="soc" class="big num">–</span><span class="spacer"></span>
+        <div class="flow"><b id="flow-title"></b><span id="flow-detail"></span></div>
+      </div>
+      <div class="bar"><i id="bar-fill"></i></div>
+    </div>
+
+    <p id="dash-error" class="error-row" hidden><svg class="ic"><use href="#i-xmark"/></svg><span></span></p>
+    <div id="warnings"></div>
+
+    <div class="card">
+      <div class="card-h">Power in<span class="spacer"></span><span id="watts-in" class="num"></span></div>
+      <div class="r" data-input="solarWatts"><svg class="ic"><use href="#i-sun"/></svg>Solar<span class="spacer"></span><span class="w"></span></div>
+      <div class="r" data-input="acInWatts"><svg class="ic"><use href="#i-shore"/></svg>Shore power<span id="shore-detail" class="sub" hidden>Connected</span><span class="spacer"></span><span class="w"></span></div>
+      <div class="r" data-input="otherInWatts"><svg class="ic"><use href="#i-car"/></svg>Alternator / DC<span class="spacer"></span><span class="w"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Power out<span class="spacer"></span><span id="watts-out" class="num"></span></div>
+      <div class="r" data-output="ac" data-title="High voltage">
+        <button class="tog" aria-label="High voltage"><svg class="ic"><use href="#i-plug-a"/></svg></button>
+        High voltage<span class="spacer"></span><span class="w"></span></div>
+      <div class="r" data-output="dc12V" data-title="Low voltage">
+        <button class="tog" aria-label="Low voltage"><svg class="ic"><use href="#i-plug-c"/></svg></button>
+        Low voltage<span class="spacer"></span><span class="w"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Batteries</div>
+      <div id="packs" class="packs">
+        <!-- Joins the two pack icons while power moves between them; the pulse runs toward the receiver. -->
+        <svg id="bracket" class="bracket" width="14" height="50" viewBox="0 0 14 50" hidden>
+          <path class="track" d="M14 50 H7 Q2 50 2 45 V5 Q2 0 7 0 H14" fill="none" stroke-width="1.5"/>
+          <path class="pulse" pathLength="100" d="M14 50 H7 Q2 50 2 45 V5 Q2 0 7 0 H14" fill="none" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div class="r" data-pack="0"><svg class="ic"><use href="#i-battery"/></svg><span class="name"></span>
+          <span class="xfer num" hidden><svg><use href="#i-up"/></svg><span></span></span>
+          <span class="spacer"></span><span class="temp num"></span><span class="pct num"></span></div>
+        <div class="r" data-pack="1"><svg class="ic"><use href="#i-battery"/></svg><span class="name"></span>
+          <span class="xfer num" hidden><svg><use href="#i-up"/></svg><span></span></span>
+          <span class="spacer"></span><span class="temp num"></span><span class="pct num"></span></div>
+      </div>
+    </div>
+
+    <footer class="foot"><span id="demo-badge" hidden>Sample data · </span>Pull down to refresh · <button id="disconnect" class="link">Disconnect</button></footer>
+  </div>
+</section>
+
+<div id="alert" class="alert-layer" hidden>
+  <div class="scrim"></div>
+  <div class="alert" role="alertdialog" aria-labelledby="alert-title">
+    <div class="body">
+      <svg class="warn"><use href="#i-warning"/></svg>
+      <h2 id="alert-title"></h2>
+    </div>
+    <div class="btns"><button id="alert-cancel">Cancel</button><button id="alert-ok" class="destroy"></button></div>
+  </div>
+</div>
+</body>
+</html>

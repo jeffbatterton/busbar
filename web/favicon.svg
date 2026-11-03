@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Busbar app icon: the bus battery logo, charging, on a graphite-to-black macOS tile. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2b2e"/><stop offset="1" stop-color="#000"/></linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity=".04"/><stop offset="1" stop-color="#fff" stop-opacity=".1"/></linearGradient>
+    <mask id="bolt-knockout" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <polygon points="422.6,251.4 322.2,417.1 392.5,417.1 374.9,547.6 477.8,379.4 407.5,379.4" fill="#000" stroke="#000" stroke-width="57.6" stroke-linejoin="round" transform="translate(119.10 131.52) scale(0.9823)"/>
+    </mask>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="184" fill="none" stroke="url(#edge)" stroke-width="3"/>
+  <g mask="url(#bolt-knockout)"><g transform="translate(119.10 131.52) scale(0.9823)" fill="#fff">
+    <path d="M215,310 V226 Q215,212 229,212 H458 Q472,212 472,226 V310 Z"/>
+    <path d="M169,489 V525 A54,54 0 0 0 277,525 V489 Z"/><path d="M522,489 V525 A54,54 0 0 0 630,525 V489 Z"/>
+    <rect x="116.0" y="292.0" width="568" height="215" rx="30.0" fill="none" stroke="#fff" stroke-width="36"/>
+    <rect x="160" y="336" width="240.0" height="127" rx="10.8"/>
+  </g></g>
+  <g transform="translate(119.10 131.52) scale(0.9823)"><polygon points="422.6,251.4 322.2,417.1 392.5,417.1 374.9,547.6 477.8,379.4 407.5,379.4" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></g>
+</svg>
