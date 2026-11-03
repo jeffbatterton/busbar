@@ -161,7 +161,22 @@
       </div>
     </div>
 
-    <footer class="foot"><span id="demo-badge" hidden>Sample data · </span>Pull down to refresh · <button id="disconnect" class="link">Disconnect</button></footer>
+    <footer class="foot"><span id="demo-badge" hidden>Sample data · </span>Pull down to refresh · <button id="show-raw" class="link">Raw values</button> · <button id="disconnect" class="link">Disconnect</button></footer>
+  </div>
+</section>
+
+<!-- Every value the Delta Pro reports, and how each has changed since a saved baseline.
+     For finding the fields the usage history will need, such as running energy totals. -->
+<section id="raw" class="screen" hidden>
+  <div class="content">
+    <header class="top">
+      <button id="raw-back" class="link">‹ Back</button><span class="spacer"></span><b>Raw values</b>
+      <span class="spacer"></span><button id="raw-copy" class="link">Copy</button>
+    </header>
+    <p class="raw-since"><span id="raw-since"></span> · <button id="raw-reset" class="link">Reset</button></p>
+    <p id="raw-error" class="error" hidden></p>
+    <div class="card"><div class="card-h">Energy &amp; capacity</div><div id="raw-energy"></div></div>
+    <div class="card"><div class="card-h">Everything else</div><div id="raw-rest"></div></div>
   </div>
 </section>
 

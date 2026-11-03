@@ -6,6 +6,7 @@ const POLL_SECONDS = 15;
 const STALE_MINUTES = 10;
 const LOW = 30, CRITICAL = 15;
 const STORAGE_KEY = "busbar.credentials";
+const BASELINE_KEY = "busbar.rawBaseline";
 
 const $ = (selector) => document.querySelector(selector);
 const demo = new URLSearchParams(location.search).has("demo");
@@ -20,12 +21,14 @@ const state = {
   /// States just switched to, shown until the device reports them (it lags a few seconds).
   expected: new Map(),
   timer: null,
+  /// The last raw quotas fetched for the Raw values screen.
+  raw: null,
 };
 
 // MARK: Screens
 
 function show(screen) {
-  for (const id of ["launch", "setup", "dashboard"]) $(`#${id}`).hidden = id !== screen;
+  for (const id of ["launch", "setup", "dashboard", "raw"]) $(`#${id}`).hidden = id !== screen;
 }
 
 function savedCredentials() {
@@ -310,6 +313,80 @@ setInterval(() => {
   if (state.snapshot && !$("#dashboard").hidden) renderStatus();
 }, 5000);
 
+// MARK: Raw values
+
+/// Fields that look like running energy totals or pack capacity: what usage history needs.
+const ENERGY = /chg|dsg|cap|cycle|energy|kwh/i;
+
+async function showRaw() {
+  stop();
+  show("raw");
+  $("#raw-error").hidden = true;
+  $("#raw-since").textContent = "Loading…";
+  try {
+    state.raw = await state.source.quotas();
+  } catch (error) {
+    $("#raw-error").textContent = error.message;
+    $("#raw-error").hidden = false;
+    return;
+  }
+  let baseline = null;
+  try { baseline = JSON.parse(localStorage.getItem(BASELINE_KEY)); } catch {}
+  if (!baseline) resetBaseline();
+  else renderRaw(baseline);
+}
+
+function resetBaseline() {
+  if (!state.raw) return;
+  const baseline = { time: Date.now(), values: state.raw };
+  localStorage.setItem(BASELINE_KEY, JSON.stringify(baseline));
+  renderRaw(baseline);
+}
+
+function renderRaw(baseline) {
+  const minutes = Math.floor((Date.now() - baseline.time) / 60000);
+  const at = new Date(baseline.time).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  $("#raw-since").textContent = minutes < 1 ? "Baseline saved just now"
+    : `Changes since ${at} (${duration(minutes)} ago)`;
+
+  const row = (key) => {
+    const value = state.raw[key], before = baseline.values[key];
+    const el = document.createElement("div");
+    el.className = "kv";
+    el.innerHTML = '<span class="k"></span><span class="delta"></span><span class="v"></span>';
+    el.querySelector(".k").textContent = key;
+    el.querySelector(".v").textContent = String(value);
+    const change = before === undefined ? null : +(value - before).toFixed(3);
+    if (change) {
+      el.querySelector(".delta").textContent = change > 0 ? `+${change}` : String(change);
+      el.querySelector(".delta").classList.toggle("down", change < 0);
+    }
+    return el;
+  };
+  const keys = Object.keys(state.raw).sort();
+  $("#raw-energy").replaceChildren(...keys.filter((k) => ENERGY.test(k)).map(row));
+  $("#raw-rest").replaceChildren(...keys.filter((k) => !ENERGY.test(k)).map(row));
+}
+
+async function copyRaw() {
+  let baseline = null;
+  try { baseline = JSON.parse(localStorage.getItem(BASELINE_KEY)); } catch {}
+  const text = JSON.stringify({ now: { time: Date.now(), values: state.raw }, baseline }, null, 1);
+  try {
+    await navigator.clipboard.writeText(text);
+    $("#raw-copy").textContent = "Copied";
+    setTimeout(() => { $("#raw-copy").textContent = "Copy"; }, 1500);
+  } catch {
+    $("#raw-error").textContent = "Couldn't copy to the clipboard.";
+    $("#raw-error").hidden = false;
+  }
+}
+
+function hideRaw() {
+  show("dashboard");
+  schedule(0);
+}
+
 // MARK: Pull to refresh
 
 function setUpPullToRefresh() {
@@ -352,6 +429,10 @@ $("#setup-form").addEventListener("submit", connect);
 $("#retry").addEventListener("click", launch);
 $("#change-keys").addEventListener("click", showSetup);
 $("#disconnect").addEventListener("click", disconnect);
+$("#show-raw").addEventListener("click", showRaw);
+$("#raw-back").addEventListener("click", hideRaw);
+$("#raw-reset").addEventListener("click", resetBaseline);
+$("#raw-copy").addEventListener("click", copyRaw);
 $("#demo-badge").hidden = !demo;
 for (const row of document.querySelectorAll("[data-output]")) {
   row.querySelector(".tog").addEventListener("click", () => toggle(row));

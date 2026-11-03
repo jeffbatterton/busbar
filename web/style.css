@@ -142,6 +142,15 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 0 0; }
 .foot .link { font-size: 12px; }
 
+/* Raw values */
+.raw-since { margin: -4px 4px 0; color: var(--text-2); font-size: 13px; }
+.kv { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hair);
+      font: 13px ui-monospace, Menlo, monospace; }
+.card-h + div .kv:first-child { border-top: none; }
+.kv .k { flex: 1; color: var(--text-2); overflow-wrap: anywhere; }
+.kv .delta { color: var(--good); }
+.kv .delta.down { color: var(--warn); }
+
 /* iOS-style alert */
 .alert-layer { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; }
 .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(2px);

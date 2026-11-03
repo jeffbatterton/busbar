@@ -80,6 +80,10 @@ export class DeltaProSource {
     return parseDeltaPro(await this.client.allQuotas());
   }
 
+  quotas() {
+    return this.client.allQuotas();
+  }
+
   setOutput(output, on) {
     return this.client.setQuota({ id: OUTPUT_IDS[output], enabled: on ? 1 : 0 });
   }
