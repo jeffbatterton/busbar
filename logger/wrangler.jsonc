@@ -1,0 +1,15 @@
+{
+  "name": "busbar-logger",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  // Every minute, matching the Mac app's default refresh.
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "busbar", "database_id": "6bad2874-bea6-4a5a-9ab3-bada695dc42c" }
+  ],
+  "observability": { "enabled": true }
+  // Secrets, set with `npx wrangler secret put <NAME>`:
+  //   READ_TOKEN                                   what the apps send to read history
+  //   ECOFLOW_ACCESS_KEY, ECOFLOW_SECRET_KEY,
+  //   ECOFLOW_SERIAL_NUMBER                        until these are set, readings are simulated
+}

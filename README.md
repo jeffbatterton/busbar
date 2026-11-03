@@ -33,6 +33,26 @@ swift scripts/make-web-icons.swift       # re-renders the icons and launch image
 `?demo` runs on simulated data. On an iPhone, Share › Add to Home Screen opens it
 full-screen with its own icon and launch image.
 
+## History logger
+
+`logger/` is a Cloudflare Worker that records the charge every minute into a D1 database,
+so the apps can chart history even while the Mac is asleep or the phone app is closed. It
+imports `web/ecoflow.js`, so signing and parsing are shared with the web app. It runs at
+https://busbar-logger.jeffbatterton.workers.dev.
+
+```sh
+cd logger
+node --test                                  # tests
+npx wrangler deploy                          # deploys it
+npx wrangler secret put READ_TOKEN           # what the apps send to read history
+npx wrangler secret put ECOFLOW_ACCESS_KEY   # also ECOFLOW_SECRET_KEY, ECOFLOW_SERIAL_NUMBER
+```
+
+Without the EcoFlow secrets it records simulated readings; the first real one deletes them.
+`GET /readings?since=<ms>[&until=<ms>]` with `Authorization: Bearer <READ_TOKEN>` answers
+`{ simulated, readings: [[time ms, charge %, watts in, watts out], …] }`, at most 8 days at
+a time.
+
 ## Layout
 
 - `Sources/BusbarCore`: UI-free logic (EcoFlow signing and client, quota parsing, alert
