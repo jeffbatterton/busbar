@@ -36,6 +36,18 @@ import Testing
         #expect(!s.shorePowerConnected)
     }
 
+    @Test func readsChargeLimits() {
+        let s = PowerSnapshot(deltaPro: Quotas(["ems.minDsgSoc": 10, "ems.maxChargeSoc": 90]))
+        #expect(s.dischargeLimit == 10)
+        #expect(s.chargeLimit == 90)
+        let unset = PowerSnapshot(deltaPro: Quotas([:]))
+        #expect(unset.dischargeLimit == 0)
+        #expect(unset.chargeLimit == 100)
+        let crossed = PowerSnapshot(deltaPro: Quotas(["ems.minDsgSoc": 60, "ems.maxChargeSoc": 50]))
+        #expect(crossed.dischargeLimit == 0)
+        #expect(crossed.chargeLimit == 100)
+    }
+
     @Test func extraBatteryDischargeIsNotOtherInput() {
         // Real reading: 427 W in, 393 W solar, extra battery discharging 37 W, engine off.
         let s = PowerSnapshot(deltaPro: Quotas(["pd.wattsInSum": 427, "mppt.inWatts": 3930,

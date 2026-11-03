@@ -43,6 +43,10 @@ public struct PowerSnapshot: Sendable, Equatable {
     public var shorePowerConnected: Bool
     public var minutesToFull: Int?
     public var minutesToEmpty: Int?
+    /// The level the battery stops discharging at, 0–100, as set in the EcoFlow app. 0 when unset.
+    public var dischargeLimit: Double
+    /// The level the battery stops charging at, 0–100, as set in the EcoFlow app. 100 when unset.
+    public var chargeLimit: Double
     public var batteries: [Battery]
     public var warnings: [String]
     public var timestamp: Date
@@ -131,6 +135,12 @@ extension PowerSnapshot {
         }
         minutesToFull = plausibleMinutes("ems.chgRemainTime")
         minutesToEmpty = plausibleMinutes("ems.dsgRemainTime")
+
+        // Ignore out-of-range or crossed limits rather than drawing them.
+        let low = q["ems.minDsgSoc"] ?? 0, high = q["ems.maxChargeSoc"] ?? 100
+        let validLimits = (0..<100).contains(low) && (1...100).contains(high) && low < high
+        dischargeLimit = validLimits ? low : 0
+        chargeLimit = validLimits ? high : 100
 
         // ems.bmsNOnline bit 0 is the pack's hardware-online signal.
         var batteries = [Battery(name: "Main",

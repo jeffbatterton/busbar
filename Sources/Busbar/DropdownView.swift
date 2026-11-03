@@ -57,7 +57,8 @@ struct DropdownView: View {
                     }
                 }
             }
-            ChargeBar(level: s.stateOfCharge / 100, color: levelColor)
+            ChargeBar(level: s.stateOfCharge / 100, color: levelColor,
+                      dischargeLimit: s.dischargeLimit / 100, chargeLimit: s.chargeLimit / 100)
         }
     }
 
@@ -384,22 +385,89 @@ private struct ToggleIcon: View {
     }
 }
 
-/// The battery level bar under the percentage, lit in the level color.
+/// The battery level bar under the percentage, lit in the level color. Charge below the
+/// discharge limit is striped in the level color, and the track above the charge limit is
+/// striped too, so the solid part is the charge you can use. A line marks each limit.
 private struct ChargeBar: View {
     let level: Double
     let color: Color
+    var dischargeLimit: Double = 0
+    var chargeLimit: Double = 1
 
     var body: some View {
         GeometryReader { geometry in
+            let width = geometry.size.width, height = geometry.size.height
+            let level = min(1, max(0, level))
+            let reserve = min(level, dischargeLimit)
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule()
-                    .fill(color)
-                    .frame(width: max(geometry.size.height, geometry.size.width * min(1, max(0, level))))
-                    .glow(color, intensity: 0.5)
+                ZStack(alignment: .leading) {
+                    if reserve > 0 {
+                        ZStack {
+                            color.opacity(0.3)
+                            Stripes().fill(color)
+                        }
+                        .frame(width: width * reserve)
+                        .clipped()
+                    }
+                    if chargeLimit < 1 {
+                        Stripes().fill(Color.primary.opacity(0.22))
+                            .frame(width: width * (1 - chargeLimit))
+                            .clipped()
+                            .offset(x: width * chargeLimit)
+                    }
+                }
+                .frame(width: width, height: height, alignment: .leading)
+                .clipShape(Capsule())
+                if level > dischargeLimit {
+                    solid(height: height)
+                        .fill(color)
+                        .frame(width: dischargeLimit > 0 ? width * (level - dischargeLimit)
+                                                         : max(height, width * level))
+                        .offset(x: width * dischargeLimit)
+                        .glow(color, intensity: 0.5)
+                }
+                ForEach([dischargeLimit, chargeLimit].filter { $0 > 0 && $0 < 1 }, id: \.self) { limit in
+                    limitLine(height: height).offset(x: width * limit - 0.5)
+                }
             }
         }
         .frame(height: 6)
+    }
+
+    /// A 1 pt line marking a limit, running 3 pt past the bar above and below.
+    private func limitLine(height: Double) -> some View {
+        Capsule()
+            .fill(Color.primary.opacity(0.6))
+            .frame(width: 1, height: height + 6)
+            .frame(height: height)
+    }
+
+    /// Rounded at both ends from empty; only at the level end when it starts at the discharge limit.
+    private func solid(height: Double) -> UnevenRoundedRectangle {
+        let leading = dischargeLimit > 0 ? 0 : height / 2
+        return UnevenRoundedRectangle(topLeadingRadius: leading, bottomLeadingRadius: leading,
+                                      bottomTrailingRadius: height / 2, topTrailingRadius: height / 2)
+    }
+}
+
+/// Diagonal stripes rising to the right, a stripe and a gap of equal width. They overhang
+/// the rect so its corners are covered; clip them to stop at its edges.
+private struct Stripes: Shape {
+    var period: Double = 3
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        var x = rect.minX - rect.height
+        while x < rect.maxX {
+            path.move(to: CGPoint(x: x, y: rect.maxY))
+            path.addLine(to: CGPoint(x: x + period / 2, y: rect.maxY))
+            path.addLine(to: CGPoint(x: x + period / 2 + rect.height, y: rect.minY))
+            path.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+            path.closeSubpath()
+            x += period
+        }
+        return path
     }
 }
 
