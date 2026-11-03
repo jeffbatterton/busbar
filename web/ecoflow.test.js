@@ -33,3 +33,15 @@ test("switching an output off drops its draw, and restoring puts it back", () =>
   assert.equal(back.wattsOut, 400);
   assert.equal(back.acOutputOn, true);
 });
+
+test("reads the charge and discharge limits, ignoring crossed ones", () => {
+  const s = parseDeltaPro({ "ems.minDsgSoc": 10, "ems.maxChargeSoc": 90 });
+  assert.equal(s.dischargeLimit, 10);
+  assert.equal(s.chargeLimit, 90);
+  const unset = parseDeltaPro({});
+  assert.equal(unset.dischargeLimit, 0);
+  assert.equal(unset.chargeLimit, 100);
+  const crossed = parseDeltaPro({ "ems.minDsgSoc": 60, "ems.maxChargeSoc": 50 });
+  assert.equal(crossed.dischargeLimit, 0);
+  assert.equal(crossed.chargeLimit, 100);
+});

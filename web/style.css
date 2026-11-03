@@ -91,9 +91,19 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 .flow b.charging { color: var(--good); }
 .flow span { color: var(--text-2); font-size: 14px; }
 .bar { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); position: relative; margin-top: 14px; }
-.bar i { position: absolute; left: 0; top: 0; bottom: 0; min-width: 8px; border-radius: 4px;
-         background: var(--level, var(--good)); box-shadow: 0 0 6px var(--level, var(--good));
-         transition: width 0.6s ease; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+#bar-fill { min-width: 8px; border-radius: 4px; background: var(--level, var(--good));
+            box-shadow: 0 0 6px var(--level, var(--good)); transition: width 0.6s ease, left 0.6s ease; }
+/* Starting at the discharge limit, the fill is only rounded at the level end. */
+#bar-fill.limited { min-width: 0; border-radius: 0 4px 4px 0; }
+/* Charge below the discharge limit is striped in the level color, the track above the
+   charge limit is striped, and a line marks each limit, so the solid part is usable charge. */
+.bar-track { position: absolute; inset: 0; overflow: hidden; border-radius: 4px; }
+#bar-reserve { background: repeating-linear-gradient(-45deg, var(--level, var(--good)) 0 2px,
+                 color-mix(in srgb, var(--level, var(--good)) 30%, transparent) 0 4px); }
+#bar-over { right: 0; background: repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.22) 0 2px, transparent 0 4px); }
+.bar .limit { position: absolute; top: -3px; bottom: -3px; width: 1px; margin-left: -0.5px; border-radius: 0.5px;
+              background: rgba(255, 255, 255, 0.6); }
 
 .error-row, .warning { display: flex; align-items: center; gap: 10px; margin: 0; padding: 0 4px;
                        color: var(--warn); font-size: 14px; }

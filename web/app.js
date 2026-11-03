@@ -264,8 +264,7 @@ function render() {
   const soc = Math.round(s.stateOfCharge);
   $("#soc").textContent = `${soc}%`;
   const level = levelColor(soc);
-  $("#bar-fill").style.width = `${Math.min(100, Math.max(0, s.stateOfCharge))}%`;
-  $("#bar-fill").style.setProperty("--level", level);
+  renderBar(s, level);
 
   const direction = flow(s);
   $("#flow-title").textContent = { charging: "Charging", discharging: "Discharging", idle: "Idle" }[direction];
@@ -308,6 +307,25 @@ function render() {
 
   renderBatteries(s);
   renderHistory();
+}
+
+/// The charge bar: solid from the discharge limit to the level, striped past either limit.
+function renderBar(s, level) {
+  const soc = Math.min(100, Math.max(0, s.stateOfCharge));
+  const low = s.dischargeLimit, high = s.chargeLimit;
+  $(".hero .bar").style.setProperty("--level", level);
+  $("#bar-reserve").style.width = `${Math.min(soc, low)}%`;
+  $("#bar-over").style.left = `${high}%`;
+  $("#bar-over").hidden = high >= 100;
+  const fill = $("#bar-fill");
+  fill.hidden = soc <= low && low > 0;
+  fill.classList.toggle("limited", low > 0);
+  fill.style.left = `${low}%`;
+  fill.style.width = `${Math.max(0, soc - low)}%`;
+  for (const [id, limit] of [["#limit-low", low], ["#limit-high", high]]) {
+    $(id).hidden = limit <= 0 || limit >= 100;
+    $(id).style.left = `${limit}%`;
+  }
 }
 
 /// The charge bar's color, which the history chart shares. Hex, not var(--good), so SVG

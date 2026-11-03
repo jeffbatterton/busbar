@@ -157,6 +157,10 @@ export function parseDeltaPro(q, timestamp = new Date()) {
     if (code) warnings.push(`${label} fault (${code})`);
   }
 
+  // The limits set in the EcoFlow app; ignore out-of-range or crossed ones rather than drawing them.
+  const low = q["ems.minDsgSoc"] ?? 0, high = q["ems.maxChargeSoc"] ?? 100;
+  const validLimits = low >= 0 && low < 100 && high > 0 && high <= 100 && low < high;
+
   return {
     stateOfCharge,
     wattsIn: solarWatts + acInWatts + otherInWatts,
@@ -167,6 +171,9 @@ export function parseDeltaPro(q, timestamp = new Date()) {
     shorePowerConnected: (q["inv.acInVol"] ?? 0) > 80000,
     minutesToFull: plausibleMinutes("ems.chgRemainTime"),
     minutesToEmpty: plausibleMinutes("ems.dsgRemainTime"),
+    // The levels the battery stops discharging and charging at, 0–100.
+    dischargeLimit: validLimits ? low : 0,
+    chargeLimit: validLimits ? high : 100,
     batteries,
     warnings,
     timestamp,
@@ -229,7 +236,7 @@ export class SimulatedSource {
     const acOut = this.acOn ? 140 + Math.trunc(rand(-20, 30)) + (Math.random() < 0.1 ? 900 : 0) : 0;
     const dc12V = this.dc12VOn ? 45 + Math.trunc(rand(0, 15)) : 0;
     const wattsOut = acOut + dc12V;
-    const solarIn = this.soc >= 100 ? 0 : solar;
+    const solarIn = this.soc >= 90 ? 0 : solar;   // stops at the charge limit below
 
     if (this.lastTick) {
       const hours = ((now - this.lastTick) / 3600000) * this.timeScale;
@@ -257,6 +264,8 @@ export class SimulatedSource {
       "mppt.carState": this.dc12VOn ? 1 : 0,
       "pd.carWatts": dc12V,
       "ems.chgRemainTime": net > 0 ? Math.trunc(((100 - this.soc) / 100) * this.capacityWh / net * 60) : 5999,
+      "ems.minDsgSoc": 5,
+      "ems.maxChargeSoc": 90,
       "ems.dsgRemainTime": net < 0 ? Math.trunc((this.soc / 100) * this.capacityWh / -net * 60) : 5999,
       "bmsSlave1.f32ShowSoc": Math.max(0, this.soc - 1.5),
       "bmsSlave1.temp": 26,
