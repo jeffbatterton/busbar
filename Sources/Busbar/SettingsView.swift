@@ -13,8 +13,56 @@ struct SettingsView: View {
         case failure(String)
     }
 
+    @State private var pane: Pane = .account
+
+    enum Pane: String, CaseIterable, Identifiable {
+        case account, history, alerts, connection, general
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .account: "EcoFlow account"
+            case .history: "Battery history"
+            case .alerts: "Battery alerts"
+            case .connection: "Connection"
+            case .general: "General"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .account: "key"
+            case .history: "chart.xyaxis.line"
+            case .alerts: "bell"
+            case .connection: "antenna.radiowaves.left.and.right"
+            case .general: "gearshape"
+            }
+        }
+    }
+
     var body: some View {
-        Form {
+        NavigationSplitView {
+            List(Pane.allCases, selection: $pane) { pane in
+                Label(pane.title, systemImage: pane.icon).tag(pane)
+            }
+            .navigationSplitViewColumnWidth(190)
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            Form { content(for: pane) }
+                .formStyle(.grouped)
+                .navigationTitle(pane.title)
+        }
+        .frame(width: 660, height: 420)
+        .onChange(of: settings.credentials) { monitor.refreshNow() }
+        .onChange(of: settings.useSimulatedData) { monitor.refreshNow() }
+        .onChange(of: settings.pollInterval) { monitor.refreshNow() }
+        .onChange(of: settings.historyURL) { monitor.resetHistory() }
+        .onChange(of: settings.historyToken) { monitor.resetHistory() }
+    }
+
+    @ViewBuilder private func content(for pane: Pane) -> some View {
+        switch pane {
+        case .account:
             Section {
                 TextField("Access key", text: $settings.accessKey)
                 SecureField("Secret key", text: $settings.secretKey)
@@ -25,22 +73,30 @@ struct SettingsView: View {
                         .disabled(settings.accessKey.isEmpty || settings.secretKey.isEmpty)
                     testResult
                 }
-            } header: {
-                Text("EcoFlow account")
             } footer: {
                 Text("Keys come from developer.ecoflow.com → Access Management. They're stored in your Keychain.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-
-            Section("Battery alerts") {
+        case .history:
+            Section {
+                TextField("Logger address", text: $settings.historyURL)
+                SecureField("Read token", text: $settings.historyToken)
+            } footer: {
+                Text("The history logger records the charge every minute, even while this Mac is asleep. The token is stored in your Keychain.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .alerts:
+            Section {
                 threshold("Low", value: $settings.lowThreshold, range: 5...80, color: .yellow)
                 threshold("Critical", value: $settings.criticalThreshold, range: 1...79, color: .red)
+            }
+            Section {
                 Toggle("Notify when battery is low", isOn: $settings.notifyBattery)
                 Toggle("Notify about faults and warnings", isOn: $settings.notifyWarnings)
                 Toggle("Notify when shore power connects or drops", isOn: $settings.notifyShorePower)
             }
-
-            Section("Connection") {
+        case .connection:
+            Section {
                 Picker("Check every", selection: $settings.pollInterval) {
                     Text("30 seconds").tag(30)
                     Text("1 minute").tag(60)
@@ -55,17 +111,11 @@ struct SettingsView: View {
                 }
                 Toggle("Notify when the bus goes offline", isOn: $settings.notifyOffline)
             }
-
-            Section("General") {
+        case .general:
+            Section {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
-        .onChange(of: settings.credentials) { monitor.refreshNow() }
-        .onChange(of: settings.useSimulatedData) { monitor.refreshNow() }
-        .onChange(of: settings.pollInterval) { monitor.refreshNow() }
     }
 
     private func threshold(_ title: String, value: Binding<Double>, range: ClosedRange<Double>,

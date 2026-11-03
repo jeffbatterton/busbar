@@ -29,7 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window = NSWindow(contentViewController: NSHostingController(
                 rootView: SettingsView(settings: settings, monitor: monitor)))
             window.title = "Busbar Settings"
-            window.styleMask = [.titled, .closable]
+            // Full-size content lets the sidebar run up under the title bar, as in System Settings.
+            window.styleMask = [.titled, .closable, .fullSizeContentView]
+            window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
