@@ -26,7 +26,7 @@ itself. The keys are kept in the browser's local storage on that phone.
 
 ```sh
 cd web && python3 -m http.server 8790   # then open http://localhost:8790/?demo
-node --test web/                         # tests for signing and parsing
+(cd web && node --test)                  # tests for signing and parsing
 swift scripts/make-web-icons.swift       # re-renders the icons and launch images
 ```
 
