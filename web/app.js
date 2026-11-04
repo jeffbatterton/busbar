@@ -1,5 +1,5 @@
 import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput } from "./ecoflow.js";
-import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, splitRuns, buckets, chargingBands, isCharging,
+import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, buckets, chargingBands, isCharging,
   smooth, simulatedHistory } from "./history.js";
 
 /// Polls while the app is open. It pauses in the background and refreshes on return.
@@ -496,19 +496,13 @@ function renderHistory() {
   }
   parts.push(hline(state.thresholds.lowThreshold, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
 
-  // A line per run of readings, with faint dashes across the gaps between them.
-  const lines = splitRuns(readings).map((run) =>
-    buckets(run, BUCKET_MINUTES[range], start, run.at(-1) === latest).map(([t, soc]) => [x(t), y(soc)]));
-  for (const points of lines) {
-    if (points.length < 2) continue;
+  // One line through every reading, running straight on across any the logger missed.
+  const points = buckets(readings, BUCKET_MINUTES[range], start, readings.at(-1) === latest)
+    .map(([t, soc]) => [x(t), y(soc)]);
+  if (points.length >= 2) {
     const path = smooth(points);
     parts.push(`<path d="${path}L${f(points.at(-1)[0])},${H}L${f(points[0][0])},${H}Z" fill="url(#chart-fill)"/>`,
       `<path d="${path}" fill="none" stroke="url(#chart-line)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
-  }
-  for (let i = 1; i < lines.length; i++) {
-    const [x1, y1] = lines[i - 1].at(-1), [x2, y2] = lines[i][0];
-    parts.push(`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="url(#chart-line)" stroke-opacity=".45"
-      stroke-width="1.5" stroke-dasharray="2 3"/>`);
   }
   const dot = `r="4" stroke="${PANEL}" stroke-width="2"`;
   if (latest && latest[0] >= start && latest[0] < end) {

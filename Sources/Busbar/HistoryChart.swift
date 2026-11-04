@@ -4,8 +4,8 @@ import SwiftUI
 
 /// The charge over today or this week: a smooth line on a fixed 0–100% scale, colored by
 /// height from green down through yellow at the low threshold to red at critical, gold bands
-/// where power was coming in, a faint dashed line at the low battery threshold, and
-/// dashed bridges across gaps where the logger missed readings.
+/// where power was coming in, and a faint dashed line at the low battery threshold. The line
+/// runs straight on across gaps where the logger missed readings.
 struct HistoryChart: View {
     let history: ChargeHistory
     let range: HistoryRange
@@ -24,7 +24,11 @@ struct HistoryChart: View {
 
     var body: some View {
         let readings = readings
-        let runs = ChargeHistory.runs(readings)
+        let points = ChargeHistory.smoothed(readings, bucket: range.bucket)
+        let levels = points.map(\.stateOfCharge)
+        let top = levels.max() ?? 0
+        let area = gradient(from: 0, to: top) { top > 0 ? 0.24 * $0 / top : 0 }
+        let line = gradient(from: levels.min() ?? 0, to: top)
         Chart {
             ForEach(Array(ChargeHistory.chargingBands(readings).enumerated()), id: \.offset) { _, band in
                 RectangleMark(xStart: .value("Time", band.start), xEnd: .value("Time", band.end),
@@ -47,33 +51,15 @@ struct HistoryChart: View {
                 .foregroundStyle(Color.yellow.opacity(0.22))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
 
-            ForEach(Array(runs.enumerated()), id: \.offset) { index, run in
-                let points = ChargeHistory.smoothed(run, bucket: range.bucket)
-                let levels = points.map(\.stateOfCharge)
-                let top = levels.max() ?? 0
-                let area = gradient(from: 0, to: top) { top > 0 ? 0.24 * $0 / top : 0 }
-                let line = gradient(from: levels.min() ?? 0, to: top)
-                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                    AreaMark(x: .value("Time", point.time), yStart: .value("Charge", 0),
-                             yEnd: .value("Charge", point.stateOfCharge), series: .value("Run", index))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(area)
-                    LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge),
-                             series: .value("Run", index))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(line)
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                }
-            }
-            ForEach(Array(zip(runs, runs.dropFirst()).enumerated()), id: \.offset) { index, pair in
-                let ends = [pair.0.last!, pair.1.first!]
-                let bridge = gradient(from: ends.map(\.stateOfCharge).min()!, to: ends.map(\.stateOfCharge).max()!) { _ in 0.45 }
-                ForEach(ends, id: \.time) { reading in
-                    LineMark(x: .value("Time", reading.time), y: .value("Charge", reading.stateOfCharge),
-                             series: .value("Gap", "gap \(index)"))
-                        .foregroundStyle(bridge)
-                        .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
-                }
+            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                AreaMark(x: .value("Time", point.time), yStart: .value("Charge", 0),
+                         yEnd: .value("Charge", point.stateOfCharge))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(area)
+                LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(line)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
             }
 
             if let hovered {
