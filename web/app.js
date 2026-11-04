@@ -44,7 +44,8 @@ function savedThresholds() {
     const saved = JSON.parse(localStorage.getItem(THRESHOLDS_KEY));
     if (saved?.lowThreshold > saved?.criticalThreshold) return { ...saved, fromMac: true };
   } catch {}
-  return { lowThreshold: 30, criticalThreshold: 15, fromMac: false };
+  // Until the logger shares them, the Mac app's as set there.
+  return { lowThreshold: 25, criticalThreshold: 10, fromMac: false };
 }
 
 // MARK: Screens
