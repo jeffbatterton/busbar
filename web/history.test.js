@@ -76,7 +76,9 @@ test("the cache fetches from Monday, then only what's new", async () => {
   const monday = at(2026, 10, 2);
   const requests = [];
   const pages = [minutes(monday, 3), minutes(at(2026, 10, 3, 12, 1), 2)];
+  const thresholds = { lowThreshold: 40, criticalThreshold: 20 };
   const fetch = async (url, init) => {
+    if (url.endsWith("/settings")) return { ok: true, status: 200, json: async () => thresholds };
     requests.push({ url, auth: init.headers.Authorization });
     return { ok: true, status: 200, json: async () => ({ simulated: false, readings: pages.shift() }) };
   };
@@ -85,6 +87,7 @@ test("the cache fetches from Monday, then only what's new", async () => {
   await cache.refresh();
   assert.deepEqual(requests[0], { url: `https://logger.example/readings?since=${monday}`, auth: "Bearer tok" });
   assert.equal(cache.readings.length, 3);
+  assert.deepEqual(cache.thresholds, thresholds);
 
   now = new Date(2026, 10, 3, 12, 5);
   await cache.refresh();

@@ -15,6 +15,8 @@ final class Monitor {
     private(set) var history = ChargeHistory()
     /// Set when the logger can't be reached and there's nothing to show.
     private(set) var historyError: String?
+    /// The thresholds the logger last accepted, so they're only sent when they change.
+    private var savedThresholds: [Double]?
     /// Outputs with a switch command in flight.
     private(set) var switchingOutputs: Set<PowerOutput> = []
     /// States just switched to, shown until the device reports them (it lags a few seconds).
@@ -101,6 +103,7 @@ final class Monitor {
     func resetHistory() {
         history = ChargeHistory()
         historyError = nil
+        savedThresholds = nil
         refreshNow()
     }
 
@@ -168,6 +171,12 @@ final class Monitor {
             return
         } catch {
             historyError = error.localizedDescription
+        }
+        // Shares the thresholds with the web app; a failure is retried next time.
+        let thresholds = [settings.lowThreshold, settings.criticalThreshold]
+        if thresholds != savedThresholds,
+           (try? await client.saveThresholds(low: thresholds[0], critical: thresholds[1])) != nil {
+            savedThresholds = thresholds
         }
     }
 

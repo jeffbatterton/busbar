@@ -163,6 +163,17 @@ public struct HistoryClient: Sendable {
         return try Self.parse(data)
     }
 
+    /// Sends the alert thresholds, in percent, for the web app to use.
+    public func saveThresholds(low: Double, critical: Double) async throws {
+        var request = URLRequest(url: baseURL.appending(path: "settings"), timeoutInterval: 20)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["lowThreshold": low, "criticalThreshold": critical])
+        let (_, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw HistoryError.http(http.statusCode) }
+    }
+
     /// `{ "readings": [[time ms, charge %, watts in, watts out], …] }`
     static func parse(_ data: Data) throws -> [ChargeReading] {
         struct Response: Decodable { var readings: [[Double]] }

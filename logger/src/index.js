@@ -5,6 +5,8 @@ import { DeltaProSource, SimulatedSource, parseDeltaPro } from "../../web/ecoflo
 
 /// The most a single request can ask for: a calendar week plus a day of slack.
 const MAX_RANGE_MS = 8 * 24 * 3600 * 1000;
+/// Alert thresholds, in percent, until the Mac app sends its own.
+const DEFAULT_SETTINGS = { lowThreshold: 30, criticalThreshold: 15 };
 
 export default {
   async scheduled(controller, env) {
@@ -45,6 +47,7 @@ export async function record(env, now) {
 }
 
 /// `GET /readings?since=<ms>[&until=<ms>]` answers `{ readings: [[t, soc, wattsIn, wattsOut], …] }`.
+/// `GET /settings` answers `{ lowThreshold, criticalThreshold }`; the Mac app `PUT`s them.
 export async function handle(request, env) {
   const cors = {
     "Access-Control-Allow-Origin": "*",
@@ -55,9 +58,20 @@ export async function handle(request, env) {
 
   const json = (body, status = 200) => Response.json(body, { status, headers: cors });
   const url = new URL(request.url);
-  if (url.pathname !== "/readings" || request.method !== "GET") return json({ error: "Not found" }, 404);
+  const route = `${request.method} ${url.pathname}`;
+  if (!["GET /readings", "GET /settings", "PUT /settings"].includes(route)) return json({ error: "Not found" }, 404);
   if (!env.READ_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.READ_TOKEN}`) {
     return json({ error: "Unauthorized" }, 401);
+  }
+  if (route === "GET /settings") return json(await settings(env));
+  if (route === "PUT /settings") {
+    const body = await request.json().catch(() => null);
+    const { lowThreshold: low, criticalThreshold: critical } = body ?? {};
+    const valid = [low, critical].every((n) => typeof n === "number" && n >= 0 && n <= 100) && critical < low;
+    if (!valid) return json({ error: "lowThreshold and criticalThreshold must be percentages, critical below low" }, 400);
+    const put = env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
+    await env.DB.batch([put.bind("lowThreshold", low), put.bind("criticalThreshold", critical)]);
+    return json(await settings(env));
   }
 
   const until = Number(url.searchParams.get("until") ?? Date.now());
@@ -74,4 +88,9 @@ export async function handle(request, env) {
     simulated: results.some((r) => r.simulated === 1),
     readings: results.map((r) => [r.t, r.soc, r.watts_in, r.watts_out]),
   });
+}
+
+async function settings(env) {
+  const { results } = await env.DB.prepare("SELECT key, value FROM settings").all();
+  return { ...DEFAULT_SETTINGS, ...Object.fromEntries(results.map((r) => [r.key, r.value])) };
 }

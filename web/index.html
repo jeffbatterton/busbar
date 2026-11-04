@@ -110,6 +110,12 @@
         <input name="historyToken" type="password" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     </div>
     <p class="help">The logger's <code>READ_TOKEN</code>, for the battery chart. Leave it blank to hide the chart.</p>
+    <p id="thresholds-h" class="group-h" hidden>Alerts</p>
+    <div id="thresholds" class="group" hidden>
+      <div class="setting">Low battery<span id="low-threshold"></span></div>
+      <div class="setting">Critical<span id="critical-threshold"></span></div>
+    </div>
+    <p id="thresholds-help" class="help" hidden>Set in the Busbar Mac app. They color the charge bar and chart here.</p>
     <p id="setup-error" class="error" hidden></p>
     <button id="connect" class="btn" type="submit">Connect</button>
     <button id="setup-cancel" class="link" type="button" hidden>Cancel</button>

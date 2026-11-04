@@ -6,11 +6,11 @@ import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, splitRuns, bucke
 const POLL_SECONDS = 15;
 /// Readings older than this show as stale, matching the Mac app's default.
 const STALE_MINUTES = 10;
-const LOW = 30, CRITICAL = 15;
 const STORAGE_KEY = "busbar.credentials";
 const BASELINE_KEY = "busbar.rawBaseline";
 const HISTORY_KEY = "busbar.history";
 const RANGE_KEY = "busbar.historyRange";
+const THRESHOLDS_KEY = "busbar.thresholds";
 const HISTORY_URL = "https://busbar-logger.jeffbatterton.workers.dev";
 
 const $ = (selector) => document.querySelector(selector);
@@ -35,7 +35,17 @@ const state = {
   /// What the chart was last drawn with, for hovering; and where the pointer is, if over it.
   chart: null,
   hoverX: null,
+  /// The alert thresholds from the Mac app, by way of the logger, kept for next time.
+  thresholds: savedThresholds(),
 };
+
+function savedThresholds() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(THRESHOLDS_KEY));
+    if (saved?.lowThreshold > saved?.criticalThreshold) return { ...saved, fromMac: true };
+  } catch {}
+  return { lowThreshold: 30, criticalThreshold: 15, fromMac: false };
+}
 
 // MARK: Screens
 
@@ -92,6 +102,10 @@ function showSetup() {
   const history = savedHistory();
   form.elements.historyUrl.value = history.url ?? "";
   form.elements.historyToken.value = history.token ?? "";
+  const { lowThreshold, criticalThreshold, fromMac } = state.thresholds;
+  $("#thresholds-h").hidden = $("#thresholds").hidden = $("#thresholds-help").hidden = !fromMac;
+  $("#low-threshold").textContent = `${Math.round(lowThreshold)}%`;
+  $("#critical-threshold").textContent = `${Math.round(criticalThreshold)}%`;
   $("#setup-error").hidden = true;
   // Opened from the dashboard's Settings link, there's a connection to go back to.
   $("#setup-cancel").hidden = !saved && !demo;
@@ -134,6 +148,8 @@ async function disconnect() {
   if (!(await confirmAlert("Disconnect from Delta Pro?", "Disconnect"))) return;
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(HISTORY_KEY);
+  localStorage.removeItem(THRESHOLDS_KEY);
+  state.thresholds = savedThresholds();
   Object.assign(state, { source: null, snapshot: null, lastUpdate: null, error: null, history: null });
   state.expected.clear();
   if (demo) history.replaceState(null, "", location.pathname);
@@ -328,9 +344,30 @@ function renderBar(s, level) {
   }
 }
 
-/// The charge bar's color, which the history chart shares. Hex, not var(--good), so SVG
+/// The charge bar's color. Hex, not var(--good), so SVG
 /// attributes can use it too.
-const levelColor = (soc) => (soc <= CRITICAL ? "#ff453a" : soc <= LOW ? "#ffd60a" : "#30d158");
+function levelColor(soc) {
+  const { lowThreshold, criticalThreshold } = state.thresholds;
+  return soc <= criticalThreshold ? "#ff453a" : soc <= lowThreshold ? "#ffd60a" : "#30d158";
+}
+
+/// The history line's colors by charge: red up to critical, yellow at low, green from 20
+/// points above low, blended in between.
+function lineColors() {
+  const { lowThreshold, criticalThreshold } = state.thresholds;
+  return [[criticalThreshold, [255, 69, 58]], [lowThreshold, [255, 214, 10]],
+    [Math.min(100, lowThreshold + 20), [48, 209, 88]]];
+}
+
+function lineColor(soc) {
+  const colors = lineColors();
+  const upper = colors.findIndex(([level]) => soc < level);
+  if (upper === -1) return `rgb(${colors.at(-1)[1]})`;
+  if (upper === 0) return `rgb(${colors[0][1]})`;
+  const [[a, from], [b, to]] = [colors[upper - 1], colors[upper]];
+  const k = (soc - a) / (b - a);
+  return `rgb(${from.map((c, i) => Math.round(c + (to[i] - c) * k))})`;
+}
 
 function renderBatteries(s) {
   // Main is first and Extra second; the transfer only shows while both are online.
@@ -395,7 +432,14 @@ async function refreshHistory() {
     history.append([[Date.now(), Math.round(s.stateOfCharge * 10) / 10, s.wattsIn, s.wattsOut]]);
   }
   await history.refresh();
-  if (history === state.history) renderHistory();
+  if (history !== state.history) return;
+  const thresholds = history.thresholds;
+  if (thresholds?.lowThreshold > thresholds?.criticalThreshold) {
+    localStorage.setItem(THRESHOLDS_KEY, JSON.stringify(thresholds));
+    state.thresholds = { ...thresholds, fromMac: true };
+    render();
+  }
+  renderHistory();
 }
 
 function renderHistory() {
@@ -420,10 +464,15 @@ function renderHistory() {
   const hline = (soc, attrs) => `<line x1="0" x2="${f(width)}" y1="${f(y(soc))}" y2="${f(y(soc))}" ${attrs}/>`;
   const readings = history.readings.filter(([t]) => t >= start && t < end);
   const latest = history.readings.at(-1);
-  const color = levelColor(state.snapshot.stateOfCharge);
-  const parts = [`<defs><linearGradient id="chart-fill" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="${H}">
-    <stop offset="0" stop-color="${color}" stop-opacity=".24"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
-    </linearGradient></defs>`];
+  // The line takes its color from its height, so its gradient spans the plot; the fill's
+  // spans the highest charge down to 0, fading as it goes.
+  const top = Math.max(1, ...readings.map(([, soc]) => soc));
+  const gradient = (id, high, opacity) => {
+    const levels = [high, ...lineColors().map(([level]) => level).reverse().filter((level) => level < high), 0];
+    return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${f(y(high))}" x2="0" y2="${H}">${levels.map((soc) =>
+      `<stop offset="${(1 - soc / high).toFixed(3)}" stop-color="${lineColor(soc)}" stop-opacity="${opacity(soc).toFixed(3)}"/>`).join("")}</linearGradient>`;
+  };
+  const parts = [`<defs>${gradient("chart-line", 100, () => 1)}${gradient("chart-fill", top, (soc) => 0.24 * soc / top)}</defs>`];
 
   // Behind everything, gold wherever power was coming in.
   for (const [from, to] of chargingBands(readings)) {
@@ -444,7 +493,7 @@ function renderHistory() {
       parts.push(label((x(days[i]) + x(days[i + 1])) / 2, text, "middle", now >= days[i] && now < days[i + 1]));
     });
   }
-  parts.push(hline(LOW, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
+  parts.push(hline(state.thresholds.lowThreshold, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
 
   // A line per run of readings, with faint dashes across the gaps between them.
   const lines = splitRuns(readings).map((run) =>
@@ -453,16 +502,16 @@ function renderHistory() {
     if (points.length < 2) continue;
     const path = smooth(points);
     parts.push(`<path d="${path}L${f(points.at(-1)[0])},${H}L${f(points[0][0])},${H}Z" fill="url(#chart-fill)"/>`,
-      `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
+      `<path d="${path}" fill="none" stroke="url(#chart-line)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
   }
   for (let i = 1; i < lines.length; i++) {
     const [x1, y1] = lines[i - 1].at(-1), [x2, y2] = lines[i][0];
-    parts.push(`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="${color}" stroke-opacity=".45"
+    parts.push(`<line x1="${f(x1)}" y1="${f(y1)}" x2="${f(x2)}" y2="${f(y2)}" stroke="url(#chart-line)" stroke-opacity=".45"
       stroke-width="1.5" stroke-dasharray="2 3"/>`);
   }
-  const dot = `r="4" fill="${color}" stroke="${PANEL}" stroke-width="2"`;
+  const dot = `r="4" stroke="${PANEL}" stroke-width="2"`;
   if (latest && latest[0] >= start && latest[0] < end) {
-    parts.push(`<circle cx="${f(x(latest[0]))}" cy="${f(y(latest[1]))}" ${dot}/>`);
+    parts.push(`<circle cx="${f(x(latest[0]))}" cy="${f(y(latest[1]))}" fill="${lineColor(latest[1])}" ${dot}/>`);
   }
   parts.push(`<g id="chart-hover" visibility="hidden"><line y1="0" y2="${H}" stroke="rgba(255,255,255,.4)"/>
     <circle ${dot}/></g>`);
@@ -489,6 +538,7 @@ function hover(px) {
   group.querySelector("line").setAttribute("x2", cx);
   group.querySelector("circle").setAttribute("cx", cx);
   group.querySelector("circle").setAttribute("cy", cy);
+  group.querySelector("circle").setAttribute("fill", lineColor(soc));
 
   const date = new Date(time);
   const at = reading === chart.latest ? "Now"

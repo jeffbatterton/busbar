@@ -6,3 +6,9 @@ CREATE TABLE IF NOT EXISTS readings (
   watts_out INTEGER NOT NULL,
   simulated INTEGER NOT NULL DEFAULT 0
 );
+
+-- The Mac app's alert thresholds, so the web app can match them.
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value REAL NOT NULL
+);

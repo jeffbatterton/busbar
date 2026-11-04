@@ -83,7 +83,7 @@ struct DropdownView: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             } else {
                 HistoryChart(history: monitor.history, range: settings.historyRange,
-                             color: levelColor, lowThreshold: settings.lowThreshold)
+                             lowThreshold: settings.lowThreshold, criticalThreshold: settings.criticalThreshold)
             }
         }
     }

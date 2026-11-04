@@ -2,20 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { handle, record } from "./src/index.js";
 
-/// Just enough of D1 for the logger: a readings table kept in memory.
+/// Just enough of D1 for the logger: readings and settings tables kept in memory.
 function fakeDB() {
-  const rows = [];
+  const rows = [], settings = new Map();
   const statement = (sql, args = []) => ({
     bind: (...values) => statement(sql, values),
     async first() {
       return [...rows].sort((a, b) => b.t - a.t)[0] ?? null;
     },
     async all() {
+      if (sql.includes("FROM settings")) return { results: [...settings].map(([key, value]) => ({ key, value })) };
       const [since, until] = args;
       return { results: rows.filter((r) => r.t >= since && r.t < until).sort((a, b) => a.t - b.t) };
     },
     async run() {
       if (sql.startsWith("DELETE")) rows.splice(0, rows.length, ...rows.filter((r) => !r.simulated));
+      else if (sql.includes("INTO settings")) settings.set(args[0], args[1]);
       else {
         const [t, soc, watts_in, watts_out, simulated] = args;
         rows.push({ t, soc, watts_in, watts_out, simulated });
@@ -59,4 +61,18 @@ test("refuses a wrong token, a missing token and oversized ranges", async () => 
   assert.equal((await read({ DB: fakeDB() }, "since=0&until=5000")).status, 401);
   assert.equal((await read(env, `since=0&until=${9 * 24 * 3600 * 1000}`)).status, 400);
   assert.equal((await read(env, "until=5000")).status, 400);
+});
+
+test("keeps the Mac app's thresholds, defaulting until it sends them", async () => {
+  const env = { DB: fakeDB(), READ_TOKEN: "secret" };
+  const settings = (method = "GET", body, token = "secret") => handle(new Request("https://logger.test/settings", {
+    method, body: body && JSON.stringify(body), headers: { Authorization: `Bearer ${token}` },
+  }), env);
+  assert.deepEqual(await (await settings()).json(), { lowThreshold: 30, criticalThreshold: 15 });
+  assert.equal((await settings("PUT", { lowThreshold: 40, criticalThreshold: 20 })).status, 200);
+  assert.deepEqual(await (await settings()).json(), { lowThreshold: 40, criticalThreshold: 20 });
+  assert.equal((await settings("PUT", { lowThreshold: 20, criticalThreshold: 40 })).status, 400);
+  assert.equal((await settings("PUT", { lowThreshold: "40" })).status, 400);
+  assert.equal((await settings("PUT", { lowThreshold: 50, criticalThreshold: 10 }, "nope")).status, 401);
+  assert.equal((await settings("DELETE")).status, 404);
 });

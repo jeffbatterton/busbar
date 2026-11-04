@@ -110,6 +110,8 @@ export class HistoryCache {
   readings = [];
   error = null;
   simulated = false;
+  /// The Mac app's `{ lowThreshold, criticalThreshold }`, once fetched.
+  thresholds = null;
   #pending = null;
 
   /// Without a `url` nothing is fetched; the demo seeds `readings` and appends instead.
@@ -152,6 +154,13 @@ export class HistoryCache {
     } catch (error) {
       this.error = error.message;
     }
+    // Thresholds are a nicety: without them the app keeps what it had.
+    try {
+      const response = await this.fetch(`${this.url}/settings`, {
+        headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(20000),
+      });
+      if (response.ok) this.thresholds = await response.json();
+    } catch {}
   }
 }
 

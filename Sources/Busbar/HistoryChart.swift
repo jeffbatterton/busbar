@@ -2,14 +2,15 @@ import BusbarCore
 import Charts
 import SwiftUI
 
-/// The charge over today or this week: a smooth line on a fixed 0–100% scale, gold bands
+/// The charge over today or this week: a smooth line on a fixed 0–100% scale, colored by
+/// height from green down through yellow at the low threshold to red at critical, gold bands
 /// where power was coming in, a faint dashed line at the low battery threshold, and
 /// dashed bridges across gaps where the logger missed readings.
 struct HistoryChart: View {
     let history: ChargeHistory
     let range: HistoryRange
-    let color: Color
     let lowThreshold: Double
+    let criticalThreshold: Double
 
     static let height: CGFloat = 92
     @State private var hovered: ChargeReading?
@@ -47,24 +48,30 @@ struct HistoryChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
 
             ForEach(Array(runs.enumerated()), id: \.offset) { index, run in
-                ForEach(Array(ChargeHistory.smoothed(run, bucket: range.bucket).enumerated()), id: \.offset) { _, point in
+                let points = ChargeHistory.smoothed(run, bucket: range.bucket)
+                let levels = points.map(\.stateOfCharge)
+                let top = levels.max() ?? 0
+                let area = gradient(from: 0, to: top) { top > 0 ? 0.24 * $0 / top : 0 }
+                let line = gradient(from: levels.min() ?? 0, to: top)
+                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                     AreaMark(x: .value("Time", point.time), yStart: .value("Charge", 0),
                              yEnd: .value("Charge", point.stateOfCharge), series: .value("Run", index))
                         .interpolationMethod(.monotone)
-                        .foregroundStyle(LinearGradient(colors: [color.opacity(0.24), color.opacity(0)],
-                                                        startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(area)
                     LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge),
                              series: .value("Run", index))
                         .interpolationMethod(.monotone)
-                        .foregroundStyle(color)
+                        .foregroundStyle(line)
                         .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 }
             }
             ForEach(Array(zip(runs, runs.dropFirst()).enumerated()), id: \.offset) { index, pair in
-                ForEach([pair.0.last!, pair.1.first!], id: \.time) { reading in
+                let ends = [pair.0.last!, pair.1.first!]
+                let bridge = gradient(from: ends.map(\.stateOfCharge).min()!, to: ends.map(\.stateOfCharge).max()!) { _ in 0.45 }
+                ForEach(ends, id: \.time) { reading in
                     LineMark(x: .value("Time", reading.time), y: .value("Charge", reading.stateOfCharge),
                              series: .value("Gap", "gap \(index)"))
-                        .foregroundStyle(color.opacity(0.45))
+                        .foregroundStyle(bridge)
                         .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [2, 3]))
                 }
             }
@@ -107,9 +114,35 @@ struct HistoryChart: View {
     private func dot(at reading: ChargeReading) -> some ChartContent {
         PointMark(x: .value("Time", reading.time), y: .value("Charge", reading.stateOfCharge))
             .symbol {
-                Circle().fill(color).frame(width: 8, height: 8)
+                Circle().fill(color(at: reading.stateOfCharge)).frame(width: 8, height: 8)
                     .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
             }
+    }
+
+    /// The line's colors by charge: red up to critical, yellow at low, green from 20 points
+    /// above low, blended in between.
+    private var levelColors: [(level: Double, color: Color)] {
+        [(criticalThreshold, .red), (lowThreshold, .yellow), (min(100, lowThreshold + 20), .green)]
+    }
+
+    private func color(at level: Double) -> Color {
+        let colors = levelColors
+        guard let upper = colors.firstIndex(where: { level < $0.level }) else { return colors.last!.color }
+        guard upper > 0 else { return colors[0].color }
+        let (low, high) = (colors[upper - 1], colors[upper])
+        return low.color.mix(with: high.color, by: (level - low.level) / (high.level - low.level))
+    }
+
+    /// The level colors, bottom to top, for a series spanning `low...high`: Swift Charts
+    /// stretches a series' gradient over the series' own bounds, not the plot's.
+    private func gradient(from low: Double, to high: Double,
+                          opacity: (Double) -> Double = { _ in 1 }) -> LinearGradient {
+        let levels = [low] + levelColors.map(\.level).filter { $0 > low && $0 < high } + [high]
+        let stops = levels.map { level in
+            Gradient.Stop(color: color(at: level).opacity(opacity(level)),
+                          location: high > low ? (level - low) / (high - low) : 0)
+        }
+        return LinearGradient(stops: stops, startPoint: .bottom, endPoint: .top)
     }
 
     private func dayStart(_ day: Int) -> Date {
