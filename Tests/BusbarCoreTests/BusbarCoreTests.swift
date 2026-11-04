@@ -201,6 +201,12 @@ extension QuotaParsingTests {
         #expect(HistoryRange.week.window(containing: date(8, 23), calendar: calendar).start == date(2, 0))  // Sunday
     }
 
+    @Test func liveCentersOnNow() {
+        let live = HistoryRange.live.window(containing: date(2, 9), calendar: calendar)
+        #expect(live.start == date(2, 6))
+        #expect(live.end == date(2, 12))
+    }
+
     @Test func splitsRunsAtGapsOverFiveMinutes() {
         let first = readings(from: date(3, 1), minutes: 10)
         let second = readings(from: first.last!.time.addingTimeInterval(5 * 60), minutes: 3)

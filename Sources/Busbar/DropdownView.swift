@@ -62,7 +62,7 @@ struct DropdownView: View {
         }
     }
 
-    /// The charge over today or this week, from the history logger.
+    /// The charge live, over today or over this week, from the history logger.
     private var batteryHistory: some View {
         @Bindable var settings = monitor.settings
         return VStack(alignment: .leading, spacing: 8) {
@@ -70,8 +70,9 @@ struct DropdownView: View {
                 Text("Battery").font(.subheadline.weight(.semibold))
                 Spacer()
                 Picker("Range", selection: $settings.historyRange) {
-                    Text("Today").tag(HistoryRange.today)
-                    Text("This week").tag(HistoryRange.week)
+                    Text("Live").tag(HistoryRange.live)
+                    Text("24h").tag(HistoryRange.today)
+                    Text("7d").tag(HistoryRange.week)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()

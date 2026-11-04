@@ -10,11 +10,16 @@ const CHARGING_WATTS = 5;
 const MERGE_MS = 15 * MINUTE;
 const MIN_BAND_MS = 10 * MINUTE;
 /// Smoothing bucket size per range, in minutes.
-export const BUCKET_MINUTES = { day: 10, week: 60 };
+export const BUCKET_MINUTES = { live: 5, day: 10, week: 60 };
 
-/// The calendar window a range covers: local midnight to midnight, or Monday to Monday.
-/// Date setters keep it right across daylight saving changes, when a day isn't 24 hours.
+/// Live's window: this long either side of now.
+export const LIVE_SPAN_MS = 3 * 3600000;
+
+/// The window a range covers: three hours either side of now, local midnight to midnight, or
+/// Monday to Monday. Date setters keep it right across daylight saving changes, when a day
+/// isn't 24 hours.
 export function windowBounds(range, date = new Date()) {
+  if (range === "live") return { start: date.getTime() - LIVE_SPAN_MS, end: date.getTime() + LIVE_SPAN_MS };
   const start = new Date(date);
   start.setHours(0, 0, 0, 0);
   if (range === "week") start.setDate(start.getDate() - (start.getDay() + 6) % 7);
@@ -103,8 +108,8 @@ export function smooth(P) {
   return s;
 }
 
-/// This week's readings, `[time, soc, wattsIn, wattsOut]` oldest first. The first refresh
-/// fetches from Monday; later ones only what's newer than the last reading. Failures keep
+/// This week's readings, `[time, soc, wattsIn, wattsOut]` oldest first, and early on a Monday
+/// the last few hours of the week before, for Live. The first refresh fetches from then; later ones only what's newer than the last reading. Failures keep
 /// what's cached and set `error`.
 export class HistoryCache {
   readings = [];
@@ -135,7 +140,7 @@ export class HistoryCache {
 
   async #load() {
     const now = this.now();
-    const { start } = windowBounds("week", now);
+    const start = Math.min(windowBounds("week", now).start, windowBounds("live", now).start);
     // A new week starts empty.
     if (this.readings[0]?.[0] < start) this.readings = this.readings.filter(([t]) => t >= start);
     if (!this.url) return;

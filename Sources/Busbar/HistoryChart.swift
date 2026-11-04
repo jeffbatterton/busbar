@@ -2,7 +2,7 @@ import BusbarCore
 import Charts
 import SwiftUI
 
-/// The charge over today or this week: a smooth line on a fixed 0–100% scale, colored by
+/// The charge live, over today or over this week: a smooth line on a fixed 0–100% scale, colored by
 /// height from green down through yellow at the low threshold to red at critical, gold bands
 /// where power was coming in, and a faint dashed line at the low battery threshold. The line
 /// runs straight on across gaps where the logger missed readings.
@@ -135,16 +135,22 @@ struct HistoryChart: View {
         Calendar.current.date(byAdding: .day, value: day, to: window.start)!
     }
 
-    /// Today: 12am 6am 12pm 6pm. This week: the day names, centered in each day.
+    /// Live: each whole hour, clear of the edges. Today: 12am 6am 12pm 6pm. This week: the
+    /// day names, centered in each day.
     private var timeAxis: some AxisContent {
-        let values: [Date] = range == .today
-            ? (0..<4).map { Calendar.current.date(byAdding: .hour, value: $0 * 6, to: window.start)! }
-            : (0..<7).map { dayStart($0).addingTimeInterval(12 * 3600) }
+        let window = window
+        let values: [Date] = switch range {
+        case .live:
+            (0...6).map { Calendar.current.dateInterval(of: .hour, for: window.start)!.end.addingTimeInterval(Double($0) * 3600) }
+                .filter { $0.timeIntervalSince(window.start) > 900 && window.end.timeIntervalSince($0) > 900 }
+        case .today: (0..<4).map { Calendar.current.date(byAdding: .hour, value: $0 * 6, to: window.start)! }
+        case .week: (0..<7).map { dayStart($0).addingTimeInterval(12 * 3600) }
+        }
         return AxisMarks(values: values) { value in
             AxisValueLabel(anchor: range == .today && value.index == 0 ? .topLeading : .top) {
                 if let date = value.as(Date.self) {
                     let isToday = range == .week && Calendar.current.isDateInToday(date)
-                    Text(range == .today ? hourLabel(date) : date.formatted(.dateTime.weekday(.abbreviated)))
+                    Text(range == .week ? date.formatted(.dateTime.weekday(.abbreviated)) : hourLabel(date))
                         .font(.system(size: 10))
                         .monospacedDigit()
                         .foregroundStyle(isToday ? .secondary : .tertiary)

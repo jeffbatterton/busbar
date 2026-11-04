@@ -153,17 +153,18 @@ final class Monitor {
         await refreshHistory()
     }
 
-    /// Fetches only the readings since the last one, keeping this calendar week's.
+    /// Fetches only the readings since the last one, keeping enough for every range: this
+    /// calendar week's, and early on a Monday the last few hours of the week before.
     private func refreshHistory() async {
         guard let client = settings.historyClient else {
             history = ChargeHistory()
             historyError = nil
             return
         }
-        let weekStart = HistoryRange.week.window(containing: .now).start
-        history.trim(before: weekStart)
+        let start = HistoryRange.allCases.map { $0.window(containing: .now).start }.min()!
+        history.trim(before: start)
         do {
-            history.append(try await client.readings(since: history.nextFetch(from: weekStart)))
+            history.append(try await client.readings(since: history.nextFetch(from: start)))
             historyError = nil
         } catch is CancellationError {
             return

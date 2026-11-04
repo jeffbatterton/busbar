@@ -95,7 +95,7 @@ test("the cache fetches from Monday, then only what's new", async () => {
   assert.equal(cache.readings.length, 5);
 });
 
-test("a failed fetch keeps the cache, and a new week drops the old one", async () => {
+test("a failed fetch keeps the cache, and a new week drops the old one once Live is past it", async () => {
   let now = new Date(2026, 10, 8, 23);
   let ok = true;
   const fetch = async () => (ok ? { ok: true, status: 200, json: async () => ({ readings: [] }) }
@@ -112,5 +112,10 @@ test("a failed fetch keeps the cache, and a new week drops the old one", async (
   now = new Date(2026, 10, 9, 0, 30);
   await cache.refresh();
   assert.equal(cache.error, null);
+  // Live still reaches back to Sunday night.
+  assert.equal(cache.readings.length, 3);
+
+  now = new Date(2026, 10, 9, 3, 30);
+  await cache.refresh();
   assert.equal(cache.readings.length, 0);
 });

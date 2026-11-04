@@ -27,16 +27,27 @@ public struct ChargePoint: Sendable, Equatable {
 /// The calendar windows the chart can show. The axis always spans the whole window,
 /// so the line stops at Now and the rest stays empty.
 public enum HistoryRange: String, Sendable, CaseIterable {
+    /// Three hours either side of now, so the latest reading sits in the middle.
+    case live
     case today, week
 
+    public static let liveSpan: TimeInterval = 3 * 3600
+
     public func window(containing date: Date, calendar: Calendar = .current) -> DateInterval {
+        if self == .live { return DateInterval(start: date - Self.liveSpan, duration: 2 * Self.liveSpan) }
         var calendar = calendar
         calendar.firstWeekday = 2  // weeks run Monday to Sunday
         return calendar.dateInterval(of: self == .today ? .day : .weekOfYear, for: date)!
     }
 
     /// Readings are averaged into buckets this long before the line is drawn.
-    public var bucket: TimeInterval { self == .today ? 10 * 60 : 60 * 60 }
+    public var bucket: TimeInterval {
+        switch self {
+        case .live: 5 * 60
+        case .today: 10 * 60
+        case .week: 60 * 60
+        }
+    }
 }
 
 /// The readings for this week, kept up to date a few at a time.

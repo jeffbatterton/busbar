@@ -30,8 +30,8 @@ const state = {
   raw: null,
   /// This week's readings from the logger, or null with no read token set.
   history: null,
-  /// The chart's range, "day" or "week".
-  range: localStorage.getItem(RANGE_KEY) === "week" ? "week" : "day",
+  /// The chart's range, "live", "day" or "week".
+  range: ["live", "week"].includes(localStorage.getItem(RANGE_KEY)) ? localStorage.getItem(RANGE_KEY) : "day",
   /// What the chart was last drawn with, for hovering; and where the pointer is, if over it.
   chart: null,
   hoverX: null,
@@ -482,10 +482,18 @@ function renderHistory() {
   parts.push(hline(100, 'stroke="rgba(255,255,255,.07)"'), hline(50, 'stroke="rgba(255,255,255,.07)"'),
     hline(0, 'stroke="rgba(255,255,255,.16)"'));
 
-  // The axis: quarter days, or a column per weekday with today's brighter.
+  // The axis: each whole hour, quarter days, or a column per weekday with today's brighter.
   const label = (at, text, anchor = "middle", today = false) =>
     `<text x="${f(at)}" y="${H + AXIS_HEIGHT - 3}" text-anchor="${anchor}"${today ? ' class="today"' : ""}>${text}</text>`;
-  if (range === "day") {
+  if (range === "live") {
+    const hour = new Date(start);
+    hour.setMinutes(60, 0, 0);
+    for (; hour.getTime() < end - 15 * 60000; hour.setHours(hour.getHours() + 1)) {
+      if (hour.getTime() - start < 15 * 60000) continue;
+      const text = hour.toLocaleTimeString([], { hour: "numeric" }).replace(/\s/g, "").toLowerCase();
+      parts.push(label(x(hour.getTime()), text));
+    }
+  } else if (range === "day") {
     ["12am", "6am", "12pm", "6pm"].forEach((text, i) => parts.push(label((width * i) / 4, text, i ? "middle" : "start")));
   } else {
     const days = dayStarts(start, 7);
@@ -497,7 +505,8 @@ function renderHistory() {
   parts.push(hline(state.thresholds.lowThreshold, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
 
   // One line through every reading, running straight on across any the logger missed.
-  const points = buckets(readings, BUCKET_MINUTES[range], start, readings.at(-1) === latest)
+  // Live's buckets keep to the clock, not its moving window, so the line holds still.
+  const points = buckets(readings, BUCKET_MINUTES[range], range === "live" ? 0 : start, readings.at(-1) === latest)
     .map(([t, soc]) => [x(t), y(soc)]);
   if (points.length >= 2) {
     const path = smooth(points);
