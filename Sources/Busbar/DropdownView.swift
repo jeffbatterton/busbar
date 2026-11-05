@@ -4,6 +4,16 @@ import SwiftUI
 struct DropdownView: View {
     let monitor: Monitor
     let openSettings: () -> Void
+    /// Opens the Busbar window; nil in the window's own sidebar.
+    var openWindow: (() -> Void)?
+    var layout: Layout = .dropdown
+
+    enum Layout {
+        /// The menu bar dropdown, with the chart in it.
+        case dropdown
+        /// Down the left of the Busbar window, which shows the chart beside it.
+        case sidebar
+    }
 
     /// Rows are a fixed height with roomy gaps, so the lists read relaxed rather than packed.
     static let rowHeight: CGFloat = 20
@@ -14,7 +24,9 @@ struct DropdownView: View {
             if let snapshot = monitor.snapshot {
                 header(snapshot)
                 Divider()
-                if monitor.settings.historyClient != nil { batteryHistory }
+                if layout == .dropdown, monitor.settings.historyClient != nil {
+                    BatteryHistory(monitor: monitor, isLarge: false)
+                }
                 section("Power in", total: snapshot.wattsIn) {
                     inputRow("Solar", icon: .sunLight, watts: snapshot.solarWatts)
                     inputRow("Shore power", icon: .evPlugCharging, watts: snapshot.acInWatts,
@@ -32,11 +44,15 @@ struct DropdownView: View {
             } else {
                 placeholder
             }
+            // In the sidebar the footer sits at the bottom of the screen.
+            if layout == .sidebar { Spacer(minLength: 0) }
             Divider()
             footer
         }
         // Wide side margins leave room for the pack transfer bracket left of the battery icons.
-        .padding(.vertical, 16)
+        // In the window the top margin clears the title bar.
+        .padding(.top, layout == .sidebar ? 40 : 16)
+        .padding(.bottom, 16)
         .padding(.horizontal, 22)
         .frame(width: 312)
     }
@@ -47,7 +63,7 @@ struct DropdownView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center) {
                 Text("\(Int(s.stateOfCharge.rounded()))%")
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .font(.system(size: layout == .sidebar ? 48 : 34, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
@@ -59,33 +75,6 @@ struct DropdownView: View {
             }
             ChargeBar(level: s.stateOfCharge / 100, color: levelColor,
                       dischargeLimit: s.dischargeLimit / 100, chargeLimit: s.chargeLimit / 100)
-        }
-    }
-
-    /// The charge live, over today or over this week, from the history logger.
-    private var batteryHistory: some View {
-        @Bindable var settings = monitor.settings
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Battery").font(.subheadline.weight(.semibold))
-                Spacer()
-                Picker("Range", selection: $settings.historyRange) {
-                    Text("Live").tag(HistoryRange.live)
-                    Text("24h").tag(HistoryRange.today)
-                    Text("7d").tag(HistoryRange.week)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.mini)
-                .fixedSize()
-            }
-            if monitor.history.readings.isEmpty, let error = monitor.historyError {
-                Text("History unavailable: \(error)")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            } else {
-                HistoryChart(history: monitor.history, range: settings.historyRange,
-                             lowThreshold: settings.lowThreshold, criticalThreshold: settings.criticalThreshold)
-            }
         }
     }
 
@@ -234,8 +223,10 @@ struct DropdownView: View {
                 openSettings()
             } label: { Image(systemName: "gearshape") }
                 .help("Settings")
-            Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }
-                .help("Quit Busbar")
+            if let openWindow {
+                Button(action: openWindow) { Image(systemName: "arrow.down.left.and.arrow.up.right") }
+                    .help("Open in a Window")
+            }
         }
         .buttonStyle(.borderless)
     }
@@ -285,6 +276,73 @@ struct DropdownView: View {
 
     private func watts(_ value: Int) -> String {
         value >= 1000 ? String(format: "%.2f kW", Double(value) / 1000) : "\(value) W"
+    }
+}
+
+/// The Battery chart with its range picker: in the dropdown, or large, filling the window.
+struct BatteryHistory: View {
+    let monitor: Monitor
+    let isLarge: Bool
+
+    var body: some View {
+        @Bindable var settings = monitor.settings
+        return VStack(alignment: .leading, spacing: isLarge ? 16 : 8) {
+            HStack(spacing: 8) {
+                Text("Battery").font(isLarge ? .title3.weight(.semibold) : .subheadline.weight(.semibold))
+                Spacer()
+                RangePicker(selection: $settings.historyRange, isLarge: isLarge)
+            }
+            if monitor.history.readings.isEmpty, let error = monitor.historyError {
+                Text("History unavailable: \(error)")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if isLarge { Spacer() }
+            } else {
+                HistoryChart(history: monitor.history, range: settings.historyRange,
+                             lowThreshold: settings.lowThreshold, criticalThreshold: settings.criticalThreshold,
+                             isLarge: isLarge,
+                             limits: monitor.snapshot.map { $0.dischargeLimit...$0.chargeLimit })
+            }
+        }
+    }
+}
+
+/// Live / 24h / 7d, drawn like the web app's: a faint track with the chosen range on a
+/// lighter grey pill, rather than the system control's accent-colored selection.
+private struct RangePicker: View {
+    @Binding var selection: HistoryRange
+    let isLarge: Bool
+    @Namespace private var pill
+
+    private let ranges: [(HistoryRange, String)] = [(.live, "Live"), (.today, "24h"), (.week, "7d")]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(ranges, id: \.0) { range, title in
+                let isOn = range == selection
+                Button { selection = range } label: {
+                    Text(title)
+                        .font(.system(size: isLarge ? 12 : 11, weight: .medium))
+                        .foregroundStyle(isOn ? .primary : .secondary)
+                        .padding(.horizontal, isLarge ? 12 : 8)
+                        .padding(.vertical, isLarge ? 3 : 1)
+                        .background {
+                            if isOn {
+                                RoundedRectangle(cornerRadius: isLarge ? 6 : 5, style: .continuous)
+                                    .fill(.primary.opacity(0.16))
+                                    .matchedGeometryEffect(id: "pill", in: pill)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(isLarge ? 2 : 1)
+        .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: isLarge ? 8 : 6, style: .continuous))
+        .animation(.easeOut(duration: 0.2), value: selection)
+        .fixedSize()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Range")
     }
 }
 

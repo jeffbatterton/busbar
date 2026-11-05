@@ -17,10 +17,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = AppSettings()
     private lazy var monitor = Monitor(settings: settings)
     private var statusItem: StatusItemController?
+    private lazy var window = WindowController(monitor: monitor) { [weak self] in self?.showSettings() }
     private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = StatusItemController(monitor: monitor) { [weak self] in self?.showSettings() }
+        statusItem = StatusItemController(monitor: monitor, openSettings: { [weak self] in self?.showSettings() },
+                                          openWindow: { [weak self] in self?.window.show(on: $0) })
         monitor.start()
     }
 

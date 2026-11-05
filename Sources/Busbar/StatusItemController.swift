@@ -16,16 +16,27 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     private var appearanceObservation: NSKeyValueObservation?
     private var sizeObservation: NSKeyValueObservation?
     private var clickOutsideMonitor: Any?
+    private let openSettings: () -> Void
+    private let openWindow: (NSScreen?) -> Void
 
-    init(monitor: Monitor, openSettings: @escaping () -> Void) {
+    init(monitor: Monitor, openSettings: @escaping () -> Void, openWindow: @escaping (NSScreen?) -> Void) {
         self.monitor = monitor
+        self.openSettings = openSettings
+        self.openWindow = openWindow
         var close: () -> Void = {}
-        host = NSHostingController(rootView: DropdownPanelContent(monitor: monitor) {
+        var screen: () -> NSScreen? = { nil }
+        host = NSHostingController(rootView: DropdownPanelContent(monitor: monitor, openSettings: {
             close()
             openSettings()
-        })
+        }, openWindow: {
+            // The screen the dropdown is on, so the window opens there.
+            let target = screen()
+            close()
+            openWindow(target)
+        }))
         super.init()
         close = { [weak self] in self?.closePanel() }
+        screen = { [weak self] in self?.panel.screen }
 
         host.sizingOptions = .preferredContentSize
         panel.contentViewController = host
@@ -37,7 +48,8 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
         guard let button = item.button else { return }
         button.target = self
-        button.action = #selector(togglePanel)
+        button.action = #selector(clicked)
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor in self?.updateLabel() }
         }
@@ -62,7 +74,34 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     // MARK: Panel
 
-    @objc private func togglePanel() {
+    /// A click opens the dropdown; a right click or Control-click shows the menu.
+    @objc private func clicked() {
+        guard let event = NSApp.currentEvent else { return togglePanel() }
+        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
+            showMenu()
+        } else {
+            togglePanel()
+        }
+    }
+
+    private func showMenu() {
+        closePanel()
+        let menu = NSMenu()
+        menu.addItem(MenuAction("Open in a Window") { [weak self] in
+            self?.openWindow(self?.item.button?.window?.screen)
+        })
+        menu.addItem(MenuAction("Refresh Now") { [weak self] in self?.monitor.refreshNow() })
+        menu.addItem(.separator())
+        menu.addItem(MenuAction("Settings…", key: ",") { [weak self] in self?.openSettings() })
+        menu.addItem(.separator())
+        menu.addItem(MenuAction("Quit Busbar", key: "q") { NSApp.terminate(nil) })
+        // Attached just for this click, so a plain click still opens the dropdown.
+        item.menu = menu
+        item.button?.performClick(nil)
+        item.menu = nil
+    }
+
+    private func togglePanel() {
         panel.isVisible ? closePanel() : openPanel()
     }
 
@@ -108,6 +147,21 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     }
 }
 
+/// A menu item that runs a closure.
+private final class MenuAction: NSMenuItem {
+    private let handler: () -> Void
+
+    init(_ title: String, key: String = "", handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: key)
+        target = self
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    @objc private func run() { handler() }
+}
+
 /// Borderless floating panel for the dropdown, styled like macOS 26's own menu bar
 /// panels (no popover arrow).
 private final class DropdownPanel: NSPanel {
@@ -141,11 +195,12 @@ struct DropdownPanelContent: View {
 
     let monitor: Monitor
     let openSettings: () -> Void
+    let openWindow: () -> Void
 
     private let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
     var body: some View {
-        DropdownView(monitor: monitor, openSettings: openSettings)
+        DropdownView(monitor: monitor, openSettings: openSettings, openWindow: openWindow)
             // macOS 26 glass is very transparent; tint it so text stays readable over
             // light content. Raise the opacity for a more solid look.
             .background(Color(nsColor: .windowBackgroundColor).opacity(0.6), in: shape)

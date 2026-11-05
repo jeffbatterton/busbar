@@ -6,11 +6,17 @@ import SwiftUI
 /// height from green down through yellow at the low threshold to red at critical, gold bands
 /// where power was coming in, and a faint dashed line at the low battery threshold. The line
 /// runs straight on across gaps where the logger missed readings.
+///
+/// Large, it fills the full-screen window: gridlines every 25% with labels, more time ticks,
+/// the charge limits shaded, a label on the low battery line, and watts in the tooltip.
 struct HistoryChart: View {
     let history: ChargeHistory
     let range: HistoryRange
     let lowThreshold: Double
     let criticalThreshold: Double
+    var isLarge = false
+    /// The discharge and charge limits, shaded beyond when large.
+    var limits: ClosedRange<Double>?
 
     static let height: CGFloat = 92
     @State private var hovered: ChargeReading?
@@ -35,7 +41,19 @@ struct HistoryChart: View {
                               yStart: .value("Charge", 0), yEnd: .value("Charge", 100))
                     .foregroundStyle(Color.powerIn.opacity(0.11))
             }
-            ForEach([100, 50, 0], id: \.self) { level in
+            if isLarge, let limits {
+                ForEach([(0, limits.lowerBound), (limits.upperBound, 100)].filter { $0.0 < $0.1 }, id: \.0) { band in
+                    RectangleMark(xStart: .value("Time", window.start), xEnd: .value("Time", window.end),
+                                  yStart: .value("Charge", band.0), yEnd: .value("Charge", band.1))
+                        .foregroundStyle(.white.opacity(0.035))
+                }
+                ForEach([limits.lowerBound, limits.upperBound].filter { $0 > 0 && $0 < 100 }, id: \.self) { limit in
+                    RuleMark(y: .value("Charge", limit))
+                        .foregroundStyle(.white.opacity(0.14))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                }
+            }
+            ForEach(isLarge ? [100, 75, 50, 25, 0] : [100, 50, 0], id: \.self) { level in
                 RuleMark(y: .value("Charge", level))
                     .foregroundStyle(.white.opacity(level == 0 ? 0.16 : 0.07))
                     .lineStyle(StrokeStyle(lineWidth: 1))
@@ -50,6 +68,12 @@ struct HistoryChart: View {
             RuleMark(y: .value("Charge", lowThreshold))
                 .foregroundStyle(Color.yellow.opacity(0.22))
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                .annotation(position: .top, alignment: .leading) {
+                    if isLarge {
+                        Text("Low battery \(Int(lowThreshold))%")
+                            .font(.system(size: 11)).foregroundStyle(Color.yellow.opacity(0.5))
+                    }
+                }
 
             ForEach(Array(points.enumerated()), id: \.offset) { _, point in
                 AreaMark(x: .value("Time", point.time), yStart: .value("Charge", 0),
@@ -59,7 +83,7 @@ struct HistoryChart: View {
                 LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge))
                     .interpolationMethod(.monotone)
                     .foregroundStyle(line)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .lineStyle(StrokeStyle(lineWidth: isLarge ? 3 : 2, lineCap: .round, lineJoin: .round))
             }
 
             if let hovered {
@@ -71,7 +95,16 @@ struct HistoryChart: View {
         }
         .chartXScale(domain: window.start...window.end)
         .chartYScale(domain: 0...100)
-        .chartYAxis(.hidden)
+        .chartYAxis {
+            AxisMarks(position: .trailing, values: [0, 25, 50, 75, 100]) { value in
+                AxisValueLabel {
+                    if let level = value.as(Int.self) {
+                        Text("\(level)%").font(.system(size: 11)).monospacedDigit().foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .chartYAxis(isLarge ? .visible : .hidden)
         .chartLegend(.hidden)
         .chartXAxis { timeAxis }
         .chartOverlay { proxy in
@@ -90,17 +123,18 @@ struct HistoryChart: View {
                     tooltip(for: hovered, isLatest: hovered == readings.last)
                         .fixedSize()
                         .position(x: min(frame.maxX - 60, max(frame.minX + 50, frame.minX + x)),
-                                  y: frame.minY + max(4, y) - 18)
+                                  y: frame.minY + max(4, y) - (isLarge ? 34 : 18))
                 }
             }
         }
-        .frame(height: Self.height)
+        .frame(height: isLarge ? nil : Self.height)
     }
 
     private func dot(at reading: ChargeReading) -> some ChartContent {
         PointMark(x: .value("Time", reading.time), y: .value("Charge", reading.stateOfCharge))
             .symbol {
-                Circle().fill(color(at: reading.stateOfCharge)).frame(width: 8, height: 8)
+                let size: CGFloat = isLarge ? 11 : 8
+                Circle().fill(color(at: reading.stateOfCharge)).frame(width: size, height: size)
                     .overlay(Circle().stroke(Color(nsColor: .windowBackgroundColor), lineWidth: 2))
             }
     }
@@ -135,15 +169,16 @@ struct HistoryChart: View {
         Calendar.current.date(byAdding: .day, value: day, to: window.start)!
     }
 
-    /// Live: each whole hour, clear of the edges. Today: 12am 6am 12pm 6pm. This week: the
-    /// day names, centered in each day.
+    /// Live: each whole hour, clear of the edges. Today: 12am 6am 12pm 6pm, or every three
+    /// hours when large. This week: the day names, centered in each day.
     private var timeAxis: some AxisContent {
         let window = window
         let values: [Date] = switch range {
         case .live:
             (0...6).map { Calendar.current.dateInterval(of: .hour, for: window.start)!.end.addingTimeInterval(Double($0) * 3600) }
                 .filter { $0.timeIntervalSince(window.start) > 900 && window.end.timeIntervalSince($0) > 900 }
-        case .today: (0..<4).map { Calendar.current.date(byAdding: .hour, value: $0 * 6, to: window.start)! }
+        case .today:
+            (0..<(isLarge ? 8 : 4)).map { Calendar.current.date(byAdding: .hour, value: $0 * (isLarge ? 3 : 6), to: window.start)! }
         case .week: (0..<7).map { dayStart($0).addingTimeInterval(12 * 3600) }
         }
         return AxisMarks(values: values) { value in
@@ -151,7 +186,7 @@ struct HistoryChart: View {
                 if let date = value.as(Date.self) {
                     let isToday = range == .week && Calendar.current.isDateInToday(date)
                     Text(range == .week ? date.formatted(.dateTime.weekday(.abbreviated)) : hourLabel(date))
-                        .font(.system(size: 10))
+                        .font(.system(size: isLarge ? 11 : 10))
                         .monospacedDigit()
                         .foregroundStyle(isToday ? .secondary : .tertiary)
                 }
@@ -168,11 +203,23 @@ struct HistoryChart: View {
         let time = isLatest ? "Now"
             : range == .week ? reading.time.formatted(.dateTime.weekday(.abbreviated).hour().minute())
             : reading.time.formatted(date: .omitted, time: .shortened)
-        return HStack(spacing: 5) {
-            Text("\(Int(reading.stateOfCharge.rounded()))%").fontWeight(.semibold).monospacedDigit()
-            Text(time + (reading.isCharging ? " · charging" : "")).foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Text("\(Int(reading.stateOfCharge.rounded()))%").fontWeight(.semibold).monospacedDigit()
+                Text(time + (reading.isCharging ? " · charging" : "")).foregroundStyle(.secondary)
+            }
+            if isLarge {
+                HStack(spacing: 0) {
+                    if reading.wattsIn > 0 {
+                        Text("\(reading.wattsIn) W in").foregroundStyle(Color.powerIn)
+                        Text(" · ")
+                    }
+                    Text("\(reading.wattsOut) W out")
+                }
+                .font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary)
+            }
         }
-        .font(.system(size: 11))
+        .font(.system(size: isLarge ? 13 : 11))
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
