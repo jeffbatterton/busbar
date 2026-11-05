@@ -14,6 +14,8 @@ const THRESHOLDS_KEY = "busbar.thresholds";
 const HISTORY_URL = "https://busbar-logger.jeffbatterton.workers.dev";
 
 const $ = (selector) => document.querySelector(selector);
+/// A phone on its side: the dashboard becomes two pages, the chart full screen and then the cards.
+const landscape = matchMedia("(orientation: landscape) and (max-height: 500px)");
 const demo = new URLSearchParams(location.search).has("demo");
 
 const state = {
@@ -280,6 +282,7 @@ function render() {
 
   const soc = Math.round(s.stateOfCharge);
   $("#soc").textContent = `${soc}%`;
+  $("#history-soc").textContent = `${soc}%`;
   const level = levelColor(soc);
   renderBar(s, level);
 
@@ -409,9 +412,9 @@ setInterval(() => {
 
 // MARK: Battery history
 
-const CHART_HEIGHT = 76, AXIS_HEIGHT = 16;
-/// The card's background, so dots stand out from the line behind them.
-const PANEL = "#1c1c1f";
+const CHART_HEIGHT = 76, AXIS_HEIGHT = 16, Y_LABELS_WIDTH = 34;
+/// The card's background, or the page's in landscape, so dots stand out from the line behind them.
+const PANEL = "#1c1c1f", BACKGROUND = "#0d0d0f";
 
 /// Starts this week's history, after the first snapshot. The demo makes up a week ending
 /// at its current charge, then adds a reading a minute as the logger would.
@@ -454,10 +457,13 @@ function renderHistory() {
   const failed = history.readings.length === 0 && history.error !== null;
   $("#history-error").hidden = !failed;
   $("#chart").hidden = failed;
-  const svg = $("#chart-svg"), width = svg.getBoundingClientRect().width;
-  if (failed || !width) return;
+  const svg = $("#chart-svg"), box = svg.getBoundingClientRect();
+  if (failed || !box.width) return;
 
-  const range = state.range, H = CHART_HEIGHT, now = Date.now();
+  // Full screen, the chart takes the height it's given and labels its gridlines on the right.
+  const large = landscape.matches;
+  const width = large ? box.width - Y_LABELS_WIDTH : box.width;
+  const range = state.range, H = large ? box.height - AXIS_HEIGHT : CHART_HEIGHT, now = Date.now();
   const { start, end } = windowBounds(range, new Date(now));
   const x = (t) => ((t - start) / (end - start)) * width;
   const y = (soc) => H - (Math.min(100, Math.max(0, soc)) / 100) * H;
@@ -479,8 +485,13 @@ function renderHistory() {
   for (const [from, to] of chargingBands(readings)) {
     parts.push(`<rect x="${f(x(from))}" y="0" width="${f(x(to) - x(from))}" height="${H}" fill="rgba(255,199,61,.11)"/>`);
   }
-  parts.push(hline(100, 'stroke="rgba(255,255,255,.07)"'), hline(50, 'stroke="rgba(255,255,255,.07)"'),
-    hline(0, 'stroke="rgba(255,255,255,.16)"'));
+  for (const soc of large ? [100, 75, 50, 25] : [100, 50]) parts.push(hline(soc, 'stroke="rgba(255,255,255,.07)"'));
+  parts.push(hline(0, 'stroke="rgba(255,255,255,.16)"'));
+  if (large) {
+    for (const soc of [100, 75, 50, 25, 0]) {
+      parts.push(`<text x="${f(width + 8)}" y="${f(y(soc) + 3.5)}">${soc}%</text>`);
+    }
+  }
 
   // The axis: each whole hour, quarter days, or a column per weekday with today's brighter.
   const label = (at, text, anchor = "middle", today = false) =>
@@ -494,7 +505,8 @@ function renderHistory() {
       parts.push(label(x(hour.getTime()), text));
     }
   } else if (range === "day") {
-    ["12am", "6am", "12pm", "6pm"].forEach((text, i) => parts.push(label((width * i) / 4, text, i ? "middle" : "start")));
+    const labels = large ? ["12am", "3am", "6am", "9am", "12pm", "3pm", "6pm", "9pm"] : ["12am", "6am", "12pm", "6pm"];
+    labels.forEach((text, i) => parts.push(label((width * i) / labels.length, text, i ? "middle" : "start")));
   } else {
     const days = dayStarts(start, 7);
     ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((text, i) => {
@@ -511,9 +523,9 @@ function renderHistory() {
   if (points.length >= 2) {
     const path = smooth(points);
     parts.push(`<path d="${path}L${f(points.at(-1)[0])},${H}L${f(points[0][0])},${H}Z" fill="url(#chart-fill)"/>`,
-      `<path d="${path}" fill="none" stroke="url(#chart-line)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`);
+      `<path d="${path}" fill="none" stroke="url(#chart-line)" stroke-width="${large ? 2.5 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`);
   }
-  const dot = `r="4" stroke="${PANEL}" stroke-width="2"`;
+  const dot = `r="${large ? 5 : 4}" stroke="${large ? BACKGROUND : PANEL}" stroke-width="2"`;
   if (latest && latest[0] >= start && latest[0] < end) {
     parts.push(`<circle cx="${f(x(latest[0]))}" cy="${f(y(latest[1]))}" fill="${lineColor(latest[1])}" ${dot}/>`);
   }
@@ -550,6 +562,10 @@ function hover(px) {
       + date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const tip = $("#chart-tip");
   tip.innerHTML = `<b>${Math.round(soc)}%</b> ${at}${isCharging(reading) ? " · charging" : ""}`;
+  if (landscape.matches) {
+    const [, , wattsIn, wattsOut] = reading;
+    tip.innerHTML += `<span class="w">${wattsIn > 0 ? `<span style="color:var(--in)">${watts(wattsIn)} in</span> · ` : ""}${watts(wattsOut)} out</span>`;
+  }
   tip.hidden = false;
   // Kept inside the card, however near the edge the reading is.
   const half = tip.offsetWidth / 2;
@@ -566,12 +582,46 @@ function unhover() {
 
 function setUpChart() {
   const chart = $("#chart");
-  const move = (event) => hover(event.clientX - $("#chart-svg").getBoundingClientRect().left);
-  chart.addEventListener("pointerdown", move);
-  chart.addEventListener("pointermove", move);
-  chart.addEventListener("pointerleave", unhover);
-  chart.addEventListener("pointercancel", unhover);
-  chart.addEventListener("pointerup", (event) => { if (event.pointerType !== "mouse") unhover(); });
+  const move = (point) => hover(point.clientX - $("#chart-svg").getBoundingClientRect().left);
+  // In landscape a touch on the chart may be a swipe to the next page, which those handle below.
+  const pointer = (handler) => (event) => {
+    if (!(landscape.matches && event.pointerType === "touch")) handler(event);
+  };
+  chart.addEventListener("pointerdown", pointer(move));
+  chart.addEventListener("pointermove", pointer(move));
+  chart.addEventListener("pointerleave", pointer(unhover));
+  chart.addEventListener("pointercancel", pointer(unhover));
+  chart.addEventListener("pointerup", pointer((event) => { if (event.pointerType !== "mouse") unhover(); }));
+
+  // The chart fills a page that swipes sideways, so there scrubbing starts with a touch and
+  // hold; a touch that moves first is a swipe.
+  let hold = null, held = false, startX = 0, startY = 0;
+  const release = () => {
+    clearTimeout(hold);
+    if (held) unhover();
+    held = false;
+  };
+  chart.addEventListener("touchstart", (event) => {
+    if (!landscape.matches) return;
+    const touch = event.touches[0];
+    startX = touch.clientX;
+    startY = touch.clientY;
+    held = false;
+    clearTimeout(hold);
+    hold = setTimeout(() => { held = true; move(touch); }, 250);
+  }, { passive: true });
+  chart.addEventListener("touchmove", (event) => {
+    if (!landscape.matches) return;
+    const touch = event.touches[0];
+    if (held) {
+      event.preventDefault();
+      move(touch);
+    } else if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 8) {
+      clearTimeout(hold);
+    }
+  }, { passive: false });
+  chart.addEventListener("touchend", release);
+  chart.addEventListener("touchcancel", release);
   for (const button of document.querySelectorAll("[data-range]")) {
     button.addEventListener("click", () => {
       state.range = button.dataset.range;
@@ -580,6 +630,23 @@ function setUpChart() {
     });
   }
   addEventListener("resize", () => { if (!$("#dashboard").hidden) renderHistory(); });
+}
+
+/// The dots under the landscape pages: they follow the swiping, and a tap goes to that page.
+function setUpPages() {
+  const content = $("#dashboard .content"), dots = [...document.querySelectorAll("#dots button")];
+  const page = () => Math.round(content.scrollLeft / content.clientWidth) || 0;
+  const sync = () => dots.forEach((dot, i) => dot.classList.toggle("on", i === page()));
+  content.addEventListener("scroll", sync, { passive: true });
+  dots.forEach((dot, i) => dot.addEventListener("click", () => {
+    content.scrollTo({ left: i * content.clientWidth, behavior: "smooth" });
+  }));
+  // Back to the chart on turning the phone, rather than part way along.
+  landscape.addEventListener("change", () => {
+    content.scrollLeft = 0;
+    sync();
+  });
+  sync();
 }
 
 // MARK: Raw values
@@ -664,7 +731,8 @@ function setUpPullToRefresh() {
   let startY = null, distance = 0;
 
   dashboard.addEventListener("touchstart", (event) => {
-    startY = window.scrollY <= 0 ? event.touches[0].clientY : null;
+    // Landscape pages swipe sideways and don't scroll, so there's nothing to pull down.
+    startY = window.scrollY <= 0 && !landscape.matches ? event.touches[0].clientY : null;
     distance = 0;
   }, { passive: true });
   dashboard.addEventListener("touchmove", (event) => {
@@ -710,4 +778,5 @@ for (const row of document.querySelectorAll("[data-output]")) {
 }
 setUpPullToRefresh();
 setUpChart();
+setUpPages();
 launch();

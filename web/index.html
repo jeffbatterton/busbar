@@ -147,7 +147,7 @@
 
     <!-- The charge over today or this week, from the logger. Drawn by renderHistory(). -->
     <div id="history" class="card" hidden>
-      <div class="card-h">Battery<span class="spacer"></span>
+      <div class="card-h">Battery<span id="history-soc" class="num"></span><span class="spacer"></span>
         <div class="seg" role="group" aria-label="Chart range">
           <button data-range="live">Live</button><button data-range="day">24h</button><button data-range="week">7d</button>
         </div>
@@ -159,6 +159,8 @@
       <p id="history-error" class="history-error" hidden>History unavailable</p>
     </div>
 
+    <!-- In landscape the chart is one page and these three cards are the next. -->
+    <div class="cards">
     <div class="card">
       <div class="card-h">Power in<span class="spacer"></span><span id="watts-in" class="num"></span></div>
       <div class="r" data-input="solarWatts"><svg class="ic"><use href="#i-sun"/></svg>Solar<span class="spacer"></span><span class="w"></span></div>
@@ -192,9 +194,11 @@
           <span class="spacer"></span><span class="temp num"></span><span class="pct num"></span></div>
       </div>
     </div>
+    </div>
 
     <footer class="foot"><span id="demo-badge" hidden>Sample data · </span>Pull down to refresh · <button id="show-raw" class="link">Raw values</button> · <button id="settings" class="link">Settings</button> · <button id="disconnect" class="link">Disconnect</button></footer>
   </div>
+  <nav id="dots" class="dots" aria-label="Pages"><button aria-label="Chart"></button><button aria-label="Power and batteries"></button></nav>
 </section>
 
 <!-- Every value the Delta Pro reports, and how each has changed since a saved baseline.

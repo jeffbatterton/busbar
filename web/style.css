@@ -180,6 +180,34 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 0 0; }
 .foot .link { font-size: 12px; }
 
+/* Landscape on a phone: two pages swiped sideways, the chart full screen and then the three
+   cards side by side, with dots to show which. The header, level and footer are left out;
+   the chart's overline carries the level. */
+.cards { display: contents; }
+#history-soc, .dots { display: none; }
+@media (orientation: landscape) and (max-height: 500px) {
+  #dashboard .content { max-width: none; height: 100dvh; padding: 0; gap: 0; flex-direction: row;
+                        overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
+                        overscroll-behavior-x: contain; scrollbar-width: none; }
+  #dashboard .content::-webkit-scrollbar { display: none; }
+  #dashboard .top, #dashboard .hero, #dashboard .foot, #dash-error, #warnings, #pull { display: none !important; }
+  #history, .cards { flex: none; width: 100vw; height: 100dvh; scroll-snap-align: start;
+                     padding: calc(env(safe-area-inset-top) + 14px) calc(env(safe-area-inset-right) + 6px)
+                              calc(env(safe-area-inset-bottom) + 30px) calc(env(safe-area-inset-left) + 6px); }
+  #history { display: flex; flex-direction: column; background: none; border-radius: 0; }
+  #history .card-h { padding-top: 0; }
+  #history-soc { display: inline; color: var(--text); margin-left: 6px; }
+  #history .chart { flex: 1; min-height: 0; padding-bottom: 0; touch-action: auto; }
+  #history .chart svg { height: 100%; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .cards .card { display: flex; flex-direction: column; padding: 2px 18px 4px; min-width: 0; }
+  .dots { display: flex; gap: 8px; position: fixed; left: 50%; transform: translateX(-50%);
+          bottom: calc(env(safe-area-inset-bottom) + 6px); }
+  .dots button { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); transition: background 0.2s; }
+  .dots button.on { background: var(--text); }
+  .tip .w { display: block; font-size: 11px; }
+}
+
 /* Raw values */
 .raw-since { margin: -4px 4px 0; color: var(--text-2); font-size: 13px; }
 .kv { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hair);
