@@ -46,8 +46,12 @@ struct DropdownView: View {
             }
             // In the sidebar the footer sits at the bottom of the screen.
             if layout == .sidebar { Spacer(minLength: 0) }
-            Divider()
-            footer
+            // Offline with nothing to show, the message says it all. Other errors keep the
+            // footer, as its gear is the way into Settings to fix them.
+            if monitor.snapshot != nil || !monitor.isDeviceOffline {
+                Divider()
+                footer
+            }
         }
         // Wide side margins leave room for the pack transfer bracket left of the battery icons.
         // In the window the top margin clears the title bar.

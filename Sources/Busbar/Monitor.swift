@@ -10,6 +10,8 @@ final class Monitor {
     private(set) var snapshot: PowerSnapshot?
     private(set) var lastUpdate: Date?
     private(set) var lastError: String?
+    /// EcoFlow says the Delta Pro itself is offline, rather than something going wrong.
+    private(set) var isDeviceOffline = false
     private(set) var isRefreshing = false
     /// This week's readings from the history logger; empty when it isn't set up.
     private(set) var history = ChargeHistory()
@@ -140,11 +142,13 @@ final class Monitor {
             self.snapshot = snapshot
             lastUpdate = .now
             lastError = nil
+            isDeviceOffline = false
             notify(alerts.evaluate(snapshot, settings: settings.alertSettings))
         } catch is CancellationError {
             return
         } catch {
             lastError = error.localizedDescription
+            isDeviceOffline = if case EcoFlowError.offline = error { true } else { false }
         }
 
         if let alert = alerts.checkStaleness(lastUpdate: lastUpdate, settings: settings.alertSettings) {

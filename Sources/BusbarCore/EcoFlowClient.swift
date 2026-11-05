@@ -28,12 +28,14 @@ public enum EcoFlowError: LocalizedError {
     case http(Int)
     case api(code: String, message: String)
     case malformedResponse
+    case offline
 
     public var errorDescription: String? {
         switch self {
         case .http(let status): "EcoFlow returned HTTP \(status)"
         case .api(let code, let message): "EcoFlow error \(code): \(message)"
         case .malformedResponse: "Unexpected response from EcoFlow"
+        case .offline: "Delta Pro is offline"
         }
     }
 }
@@ -69,6 +71,13 @@ public struct EcoFlowClient: Sendable {
             let online = (item["online"] as? NSNumber)?.intValue == 1
             return EcoFlowDevice(serialNumber: sn, name: name, online: online)
         }
+    }
+
+    /// Whether EcoFlow can reach the configured device. Its quotas don't say: while the
+    /// device is offline they still answer, with the last values it reported.
+    /// True when the device isn't listed, so a missing entry doesn't hide real readings.
+    public func isOnline() async throws -> Bool {
+        try await devices().first { $0.serialNumber == credentials.serialNumber }?.online ?? true
     }
 
     /// Sends a set command to the configured device, e.g. `["id": 66, "enabled": 1]`.

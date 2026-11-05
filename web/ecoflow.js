@@ -34,6 +34,15 @@ export class EcoFlowClient {
     return quotas;
   }
 
+  /// Whether EcoFlow can reach the device. Its quotas don't say: while the device is
+  /// offline they still answer, with the last values it reported. True when the device
+  /// isn't listed, so a missing entry doesn't hide real readings.
+  async isOnline() {
+    const list = await this.#get("/iot-open/sign/device/list", {});
+    const device = Array.isArray(list) ? list.find((d) => d.sn === this.serialNumber) : undefined;
+    return device ? Number(device.online) === 1 : true;
+  }
+
   /// Sends a set command, e.g. `{ id: 66, enabled: 1 }`.
   async setQuota(params) {
     const body = { sn: this.serialNumber, operateType: "TCP", params };
@@ -76,8 +85,11 @@ export class DeltaProSource {
     this.client = new EcoFlowClient(credentials);
   }
 
+  /// Throws rather than passing off old readings as new while the device is offline.
   async snapshot() {
-    return parseDeltaPro(await this.client.allQuotas());
+    const [quotas, online] = await Promise.all([this.client.allQuotas(), this.client.isOnline()]);
+    if (!online) throw new EcoFlowError("Delta Pro is offline");
+    return parseDeltaPro(quotas);
   }
 
   quotas() {

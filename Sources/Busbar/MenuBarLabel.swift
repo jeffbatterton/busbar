@@ -12,9 +12,12 @@ enum MenuBarLabel {
     @MainActor
     static func image(for monitor: Monitor, appearance: NSAppearance) -> NSImage {
         let snapshot = monitor.snapshot
-        let tint: NSColor? = monitor.isStale ? .secondaryLabelColor : nil
+        // Old readings are dimmed. With no reading at all there's nothing to dim: just the
+        // bus and the dot.
+        let isStale = snapshot != nil && monitor.isStale
+        let tint: NSColor? = isStale ? .secondaryLabelColor : nil
         // Like the system battery: only the charge fill takes the level color.
-        let fill: NSColor? = if monitor.isStale {
+        let fill: NSColor? = if isStale {
             nil
         } else {
             switch monitor.batteryLevel {
@@ -27,12 +30,12 @@ enum MenuBarLabel {
         // reserved for problems: unavailable battery, faults, offline, API errors.
         let dot: NSColor? = monitor.hasProblem ? .systemRed : nil
         return render(level: (snapshot?.stateOfCharge ?? 0) / 100,
-                      text: snapshot.map { "\(Int($0.stateOfCharge.rounded()))%" } ?? "–",
+                      text: snapshot.map { "\(Int($0.stateOfCharge.rounded()))%" },
                       flow: snapshot?.flow, tint: tint, fill: fill, dot: dot, appearance: appearance)
     }
 
     @MainActor
-    static func render(level: Double, text: String, flow: PowerSnapshot.Flow?,
+    static func render(level: Double, text: String?, flow: PowerSnapshot.Flow?,
                        tint: NSColor?, fill: NSColor?, dot: NSColor?, appearance: NSAppearance) -> NSImage {
         let isTemplate = tint == nil && fill == nil && dot == nil
         let foreground = isTemplate ? Color.black : resolve(tint ?? .labelColor, in: appearance)
@@ -50,14 +53,16 @@ enum MenuBarLabel {
             }
             .compositingGroup()
             .frame(height: 14)
-            HStack(spacing: 1) {
-                Text(text)
-                    .font(.system(size: 13, weight: .medium))
-                    .monospacedDigit()
-                switch flow {
-                case .charging: Image(systemName: "arrow.up").font(.system(size: 10, weight: .bold))
-                case .discharging: Image(systemName: "arrow.down").font(.system(size: 10, weight: .bold))
-                case .idle, nil: EmptyView()
+            if let text {
+                HStack(spacing: 1) {
+                    Text(text)
+                        .font(.system(size: 13, weight: .medium))
+                        .monospacedDigit()
+                    switch flow {
+                    case .charging: Image(systemName: "arrow.up").font(.system(size: 10, weight: .bold))
+                    case .discharging: Image(systemName: "arrow.down").font(.system(size: 10, weight: .bold))
+                    case .idle, nil: EmptyView()
+                    }
                 }
             }
         }

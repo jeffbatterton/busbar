@@ -18,8 +18,12 @@ public struct EcoFlowDeltaProSource: PowerSource {
         client = EcoFlowClient(credentials: credentials)
     }
 
+    /// Throws `EcoFlowError.offline` rather than passing off old readings as new.
     public func snapshot() async throws -> PowerSnapshot {
-        PowerSnapshot(deltaPro: try await client.allQuotas())
+        async let online = client.isOnline()
+        let quotas = try await client.allQuotas()
+        guard try await online else { throw EcoFlowError.offline }
+        return PowerSnapshot(deltaPro: quotas)
     }
 
     public func setOutput(_ output: PowerOutput, on: Bool) async throws {
