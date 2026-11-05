@@ -5,7 +5,9 @@ import SwiftUI
 /// The charge live, over today or over this week: a smooth line on a fixed 0–100% scale, colored by
 /// height from green down through yellow at the low threshold to red at critical, gold bands
 /// where power was coming in, and a faint dashed line at the low battery threshold. The line
-/// runs straight on across gaps where the logger missed readings.
+/// runs straight on across the few minutes the logger sometimes misses; where the Delta Pro
+/// was offline it breaks, over a hatched band, with a dotted line from where it left off to
+/// where it came back.
 ///
 /// Large, it fills the full-screen window: gridlines every 25% with labels, more time ticks,
 /// the charge limits shaded, a label on the low battery line, and watts in the tooltip.
@@ -20,6 +22,8 @@ struct HistoryChart: View {
 
     static let height: CGFloat = 92
     @State private var hovered: ChargeReading?
+    /// The offline stretch under the pointer, and where in it the pointer is.
+    @State private var hoveredOutage: (outage: DateInterval, at: Date)?
 
     private var window: DateInterval { range.window(containing: .now) }
 
@@ -30,11 +34,12 @@ struct HistoryChart: View {
 
     var body: some View {
         let readings = readings
-        let points = ChargeHistory.smoothed(readings, bucket: range.bucket)
-        let levels = points.map(\.stateOfCharge)
-        let top = levels.max() ?? 0
-        let area = gradient(from: 0, to: top) { top > 0 ? 0.24 * $0 / top : 0 }
-        let line = gradient(from: levels.min() ?? 0, to: top)
+        let now = Date.now
+        let outages = outages(now: now)
+        // A line per stretch the Delta Pro was online, each smoothed on its own.
+        let segments = ChargeHistory.runs(readings, gap: ChargeHistory.offlineGap)
+            .map { ChargeHistory.smoothed($0, bucket: range.bucket) }
+        let top = segments.joined().map(\.stateOfCharge).max() ?? 0
         Chart {
             ForEach(Array(ChargeHistory.chargingBands(readings).enumerated()), id: \.offset) { _, band in
                 RectangleMark(xStart: .value("Time", band.start), xEnd: .value("Time", band.end),
@@ -75,17 +80,48 @@ struct HistoryChart: View {
                     }
                 }
 
-            ForEach(Array(points.enumerated()), id: \.offset) { _, point in
-                AreaMark(x: .value("Time", point.time), yStart: .value("Charge", 0),
-                         yEnd: .value("Charge", point.stateOfCharge))
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(area)
-                LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge))
-                    .interpolationMethod(.monotone)
-                    .foregroundStyle(line)
-                    .lineStyle(StrokeStyle(lineWidth: isLarge ? 3 : 2, lineCap: .round, lineJoin: .round))
+            ForEach(Array(segments.enumerated()), id: \.offset) { index, points in
+                let levels = points.map(\.stateOfCharge)
+                let high = levels.max() ?? 0
+                let area = gradient(from: 0, to: high) { top > 0 ? 0.24 * $0 / top : 0 }
+                let line = gradient(from: levels.min() ?? 0, to: high)
+                ForEach(Array(points.enumerated()), id: \.offset) { _, point in
+                    AreaMark(x: .value("Time", point.time), yStart: .value("Charge", 0),
+                             yEnd: .value("Charge", point.stateOfCharge), series: .value("Segment", "area \(index)"))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(area)
+                    LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge),
+                             series: .value("Segment", "line \(index)"))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(line)
+                        .lineStyle(StrokeStyle(lineWidth: isLarge ? 3 : 2, lineCap: .round, lineJoin: .round))
+                }
+            }
+            // Across each outage, a dotted line from where the charge left off to where it came
+            // back, with a small open dot at each end.
+            ForEach(Array(zip(segments, segments.dropFirst()).enumerated()), id: \.offset) { index, pair in
+                if let from = pair.0.last, let to = pair.1.first {
+                    ForEach([from, to], id: \.time) { point in
+                        LineMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge),
+                                 series: .value("Segment", "bridge \(index)"))
+                            .foregroundStyle(color(at: (from.stateOfCharge + to.stateOfCharge) / 2).opacity(0.55))
+                            .lineStyle(StrokeStyle(lineWidth: isLarge ? 2 : 1.5, lineCap: .round, dash: [0.1, 4]))
+                    }
+                    ForEach([from, to], id: \.time) { point in
+                        PointMark(x: .value("Time", point.time), y: .value("Charge", point.stateOfCharge))
+                            .symbol {
+                                let size: CGFloat = isLarge ? 7 : 5
+                                Circle().fill(Color(nsColor: .windowBackgroundColor)).frame(width: size, height: size)
+                                    .overlay(Circle().stroke(color(at: point.stateOfCharge), lineWidth: 1.5))
+                            }
+                    }
+                }
             }
 
+            if let hoveredOutage {
+                RuleMark(x: .value("Time", hoveredOutage.at)).foregroundStyle(.white.opacity(0.35))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+            }
             if let hovered {
                 RuleMark(x: .value("Time", hovered.time)).foregroundStyle(.white.opacity(0.4))
                     .lineStyle(StrokeStyle(lineWidth: 1))
@@ -107,16 +143,42 @@ struct HistoryChart: View {
         .chartYAxis(isLarge ? .visible : .hidden)
         .chartLegend(.hidden)
         .chartXAxis { timeAxis }
+        .chartBackground { proxy in
+            GeometryReader { geometry in
+                if let plot = proxy.plotFrame {
+                    let frame = geometry[plot]
+                    ForEach(outages, id: \.shown.start) { outage in
+                        if let start = proxy.position(forX: outage.shown.start), let end = proxy.position(forX: outage.shown.end) {
+                            Hatching().frame(width: max(0, end - start), height: frame.height)
+                                .position(x: frame.minX + (start + end) / 2, y: frame.midY)
+                        }
+                    }
+                }
+            }
+        }
         .chartOverlay { proxy in
             GeometryReader { geometry in
                 Rectangle().fill(.clear).contentShape(Rectangle())
                     .onContinuousHover { phase in
+                        hoveredOutage = nil
                         guard case .active(let location) = phase, let plot = proxy.plotFrame,
-                              let time: Date = proxy.value(atX: location.x - geometry[plot].minX),
-                              let last = readings.last, time <= last.time.addingTimeInterval(window.duration / 40)
+                              let time: Date = proxy.value(atX: location.x - geometry[plot].minX)
+                        else { hovered = nil; return }
+                        if let outage = outages.first(where: { $0.shown.start < time && time < $0.shown.end }) {
+                            hovered = nil
+                            hoveredOutage = (outage.outage, time)
+                            return
+                        }
+                        guard let last = readings.last, time <= last.time.addingTimeInterval(window.duration / 40)
                         else { hovered = nil; return }
                         hovered = readings.min { abs($0.time.timeIntervalSince(time)) < abs($1.time.timeIntervalSince(time)) }
                     }
+                if let hoveredOutage, let plot = proxy.plotFrame, let x = proxy.position(forX: hoveredOutage.at) {
+                    let frame = geometry[plot]
+                    offlineTooltip(for: hoveredOutage.outage, isOngoing: hoveredOutage.outage.end == now)
+                        .fixedSize()
+                        .position(x: min(frame.maxX - 70, max(frame.minX + 70, frame.minX + x)), y: frame.midY)
+                }
                 if let hovered, let plot = proxy.plotFrame,
                    let x = proxy.position(forX: hovered.time), let y = proxy.position(forY: hovered.stateOfCharge) {
                     let frame = geometry[plot]
@@ -128,6 +190,17 @@ struct HistoryChart: View {
             }
         }
         .frame(height: isLarge ? nil : Self.height)
+    }
+
+    /// The offline stretches in this window, cut to it and to now. Found from all the
+    /// readings, so one that began before the window still shows.
+    private func outages(now: Date) -> [(shown: DateInterval, outage: DateInterval)] {
+        let window = window
+        let end = min(window.end, now)
+        return ChargeHistory.outages(history.readings, now: now).compactMap { outage in
+            let start = max(outage.start, window.start), stop = min(outage.end, end)
+            return start < stop ? (DateInterval(start: start, end: stop), outage) : nil
+        }
     }
 
     private func dot(at reading: ChargeReading) -> some ChartContent {
@@ -199,6 +272,25 @@ struct HistoryChart: View {
         date.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated))).filter { !$0.isWhitespace }.lowercased()
     }
 
+    private func offlineTooltip(for outage: DateInterval, isOngoing: Bool) -> some View {
+        let start = outage.start.formatted(date: .omitted, time: .shortened)
+        let span = isOngoing ? "since \(start)" : "\(start) – \(outage.end.formatted(date: .omitted, time: .shortened))"
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Text("Offline").fontWeight(.semibold)
+                Text(span).foregroundStyle(.secondary)
+            }
+            Text("No readings for \(AlertEngine.duration(Int(outage.duration / 60)))")
+                .font(.system(size: isLarge ? 11 : 10)).foregroundStyle(.secondary)
+        }
+        .font(.system(size: isLarge ? 13 : 11))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(.white.opacity(0.18), lineWidth: 0.5))
+        .allowsHitTesting(false)
+    }
+
     private func tooltip(for reading: ChargeReading, isLatest: Bool) -> some View {
         let time = isLatest ? "Now"
             : range == .week ? reading.time.formatted(.dateTime.weekday(.abbreviated).hour().minute())
@@ -225,5 +317,21 @@ struct HistoryChart: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(.white.opacity(0.18), lineWidth: 0.5))
         .allowsHitTesting(false)
+    }
+}
+
+/// Faint diagonal stripes for when the Delta Pro was offline.
+private struct Hatching: View {
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white.opacity(0.025)))
+            var stripes = Path()
+            for x in stride(from: -size.height, to: size.width, by: 6) {
+                stripes.move(to: CGPoint(x: x, y: size.height))
+                stripes.addLine(to: CGPoint(x: x + size.height, y: 0))
+            }
+            context.stroke(stripes, with: .color(.white.opacity(0.08)), lineWidth: 1.5)
+        }
+        .clipped()
     }
 }

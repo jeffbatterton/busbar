@@ -4,7 +4,7 @@ process.env.TZ = "America/Los_Angeles";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { windowBounds, dayStarts, splitRuns, buckets, chargingBands, smooth, HistoryCache } from "./history.js";
+import { windowBounds, dayStarts, splitRuns, buckets, chargingBands, outages, smooth, HistoryCache } from "./history.js";
 
 const MINUTE = 60000;
 const at = (...args) => new Date(...args).getTime();
@@ -118,4 +118,12 @@ test("a failed fetch keeps the cache, and a new week drops the old one once Live
   now = new Date(2026, 10, 9, 3, 30);
   await cache.refresh();
   assert.equal(cache.readings.length, 0);
+});
+
+test("outages are gaps over 15 minutes, and the time since the last reading", () => {
+  const t = at(2026, 10, 5, 3);
+  const readings = [...minutes(t, 10), ...minutes(t + 24 * MINUTE, 10), ...minutes(t + 7 * 60 * MINUTE, 10)];
+  const lastAt = t + 7 * 60 * MINUTE + 9 * MINUTE;
+  assert.deepEqual(outages(readings, lastAt + MINUTE), [[t + 33 * MINUTE, t + 7 * 60 * MINUTE]]);
+  assert.deepEqual(outages(readings, lastAt + 20 * MINUTE).at(-1), [lastAt, lastAt + 20 * MINUTE]);
 });

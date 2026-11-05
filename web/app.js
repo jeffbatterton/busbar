@@ -1,5 +1,6 @@
 import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput } from "./ecoflow.js";
 import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, buckets, chargingBands, isCharging,
+  splitRuns, outages, OFFLINE_MS,
   smooth, simulatedHistory } from "./history.js";
 
 /// Polls while the app is open. It pauses in the background and refreshes on return.
@@ -479,7 +480,18 @@ function renderHistory() {
     return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${f(y(high))}" x2="0" y2="${H}">${levels.map((soc) =>
       `<stop offset="${(1 - soc / high).toFixed(3)}" stop-color="${lineColor(soc)}" stop-opacity="${opacity(soc).toFixed(3)}"/>`).join("")}</linearGradient>`;
   };
-  const parts = [`<defs>${gradient("chart-line", 100, () => 1)}${gradient("chart-fill", top, (soc) => 0.24 * soc / top)}</defs>`];
+  const hatch = `<pattern id="chart-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="rgba(255,255,255,.025)"/><line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,.08)" stroke-width="2"/></pattern>`;
+  const parts = [`<defs>${gradient("chart-line", 100, () => 1)}${gradient("chart-fill", top, (soc) => 0.24 * soc / top)}${hatch}</defs>`];
+
+  // Hatched wherever the Delta Pro was offline, cut to the window and to now. Found from all
+  // the readings, so one that began before the window still shows.
+  const offline = outages(history.readings, now)
+    .map(([from, to]) => [Math.max(from, start), Math.min(to, end, now), from, to, to === now])
+    .filter(([from, to]) => from < to);
+  for (const [from, to] of offline) {
+    parts.push(`<rect x="${f(x(from))}" y="0" width="${f(x(to) - x(from))}" height="${H}" fill="url(#chart-hatch)"/>`);
+  }
 
   // Behind everything, gold wherever power was coming in.
   for (const [from, to] of chargingBands(readings)) {
@@ -516,15 +528,28 @@ function renderHistory() {
   }
   parts.push(hline(state.thresholds.lowThreshold, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
 
-  // One line through every reading, running straight on across any the logger missed.
-  // Live's buckets keep to the clock, not its moving window, so the line holds still.
-  const points = buckets(readings, BUCKET_MINUTES[range], range === "live" ? 0 : start, readings.at(-1) === latest)
-    .map(([t, soc]) => [x(t), y(soc)]);
-  if (points.length >= 2) {
+  // A line per stretch the Delta Pro was online, running straight on across the few minutes
+  // the logger sometimes misses. Live's buckets keep to the clock, not its moving window, so
+  // the line holds still.
+  const segments = splitRuns(readings, OFFLINE_MS).map((run) =>
+    buckets(run, BUCKET_MINUTES[range], range === "live" ? 0 : start, run.at(-1) === latest)
+      .map(([t, soc]) => [x(t), y(soc), soc]));
+  for (const points of segments) {
+    if (points.length < 2) continue;
     const path = smooth(points);
     parts.push(`<path d="${path}L${f(points.at(-1)[0])},${H}L${f(points[0][0])},${H}Z" fill="url(#chart-fill)"/>`,
       `<path d="${path}" fill="none" stroke="url(#chart-line)" stroke-width="${large ? 2.5 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`);
   }
+  // Across each outage, a dotted line from where the charge left off to where it came back,
+  // with a small open dot at each end.
+  segments.slice(1).forEach((points, i) => {
+    const from = segments[i].at(-1), to = points[0];
+    parts.push(`<line x1="${f(from[0])}" y1="${f(from[1])}" x2="${f(to[0])}" y2="${f(to[1])}" stroke="${lineColor((from[2] + to[2]) / 2)}"
+      stroke-opacity=".55" stroke-width="${large ? 2 : 1.5}" stroke-dasharray="0.1 4" stroke-linecap="round"/>`);
+    for (const [cx, cy, soc] of [from, to]) {
+      parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${large ? 3 : 2.5}" fill="${large ? BACKGROUND : PANEL}" stroke="${lineColor(soc)}" stroke-width="1.5"/>`);
+    }
+  });
   const dot = `r="${large ? 5 : 4}" stroke="${large ? BACKGROUND : PANEL}" stroke-width="2"`;
   if (latest && latest[0] >= start && latest[0] < end) {
     parts.push(`<circle cx="${f(x(latest[0]))}" cy="${f(y(latest[1]))}" fill="${lineColor(latest[1])}" ${dot}/>`);
@@ -533,7 +558,7 @@ function renderHistory() {
     <circle ${dot}/></g>`);
 
   svg.innerHTML = parts.join("");
-  state.chart = { readings, latest, range, width, start, end, x, y };
+  state.chart = { readings, latest, range, width, start, end, x, y, H, offline };
   if (state.hoverX === null) $("#chart-tip").hidden = true;
   else hover(state.hoverX);
 }
@@ -541,9 +566,13 @@ function renderHistory() {
 /// Snaps to the recorded reading nearest the pointer, which is never past now.
 function hover(px) {
   const chart = state.chart;
-  if (!chart?.readings.length) return;
+  if (!chart?.readings.length && !chart?.offline.length) return;
   state.hoverX = px;
   const t = chart.start + (px / chart.width) * (chart.end - chart.start);
+  const tip = $("#chart-tip");
+  const top = $("#chart-svg").getBoundingClientRect().top - $("#chart").getBoundingClientRect().top;
+  const outage = chart.offline.find(([from, to]) => from < t && t < to);
+  if (outage || !chart.readings.length) return outage ? hoverOffline(outage, px, tip, top) : unhover();
   let reading = chart.readings[0];
   for (const r of chart.readings) if (Math.abs(r[0] - t) < Math.abs(reading[0] - t)) reading = r;
 
@@ -555,12 +584,12 @@ function hover(px) {
   group.querySelector("circle").setAttribute("cx", cx);
   group.querySelector("circle").setAttribute("cy", cy);
   group.querySelector("circle").setAttribute("fill", lineColor(soc));
+  group.querySelector("circle").setAttribute("visibility", "visible");
 
   const date = new Date(time);
   const at = reading === chart.latest ? "Now"
     : (chart.range === "week" ? `${date.toLocaleDateString([], { weekday: "short" })} ` : "")
       + date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  const tip = $("#chart-tip");
   tip.innerHTML = `<b>${Math.round(soc)}%</b> ${at}${isCharging(reading) ? " · charging" : ""}`;
   if (landscape.matches) {
     const [, , wattsIn, wattsOut] = reading;
@@ -570,8 +599,24 @@ function hover(px) {
   // Kept inside the card, however near the edge the reading is.
   const half = tip.offsetWidth / 2;
   tip.style.left = `${Math.min(chart.width - half, Math.max(half, cx))}px`;
-  const top = $("#chart-svg").getBoundingClientRect().top - $("#chart").getBoundingClientRect().top;
   tip.style.top = `${top + cy - 8}px`;
+}
+
+/// Over an outage: when it was and how long, with the crosshair but no dot.
+function hoverOffline([, , from, to, ongoing], px, tip, top) {
+  const chart = state.chart;
+  const group = $("#chart-hover");
+  group.setAttribute("visibility", "visible");
+  group.querySelector("line").setAttribute("x1", px);
+  group.querySelector("line").setAttribute("x2", px);
+  group.querySelector("circle").setAttribute("visibility", "hidden");
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  tip.innerHTML = `<b>Offline</b> ${ongoing ? `since ${clock(from)}` : `${clock(from)} – ${clock(to)}`}`
+    + `<span class="sub">No readings for ${duration(Math.round((to - from) / 60000))}</span>`;
+  tip.hidden = false;
+  const half = tip.offsetWidth / 2;
+  tip.style.left = `${Math.min(chart.width - half, Math.max(half, px))}px`;
+  tip.style.top = `${top + chart.H / 2 + tip.offsetHeight / 2}px`;
 }
 
 function unhover() {

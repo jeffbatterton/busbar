@@ -215,6 +215,18 @@ extension QuotaParsingTests {
         #expect(runs.map(\.count) == [13, 3])
     }
 
+    @Test func outagesAreGapsOverFifteenMinutesAndTheTimeSinceTheLastReading() {
+        let first = readings(from: date(5, 3), minutes: 10)
+        let second = readings(from: first.last!.time.addingTimeInterval(15 * 60), minutes: 10)
+        let third = readings(from: date(5, 10, 15), minutes: 10)
+        let all = first + second + third
+        #expect(ChargeHistory.outages(all, now: third.last!.time.addingTimeInterval(60))
+            == [DateInterval(start: second.last!.time, end: date(5, 10, 15))])
+        // Quiet for over 15 minutes up to now: offline since the last reading.
+        #expect(ChargeHistory.outages(all, now: date(5, 11)).last
+            == DateInterval(start: third.last!.time, end: date(5, 11)))
+    }
+
     @Test func smoothingAveragesBucketsAndEndsOnTheLastReading() {
         var run = readings(from: date(3, 1), minutes: 25)
         for index in run.indices { run[index].stateOfCharge = Double(index) }

@@ -4,6 +4,9 @@
 const MINUTE = 60000;
 /// Readings further apart than this are a gap: the line breaks there.
 export const GAP_MS = 5 * MINUTE;
+/// A gap this long means the Delta Pro was offline: the logger only misses a few minutes on
+/// its own, and records nothing while the device is offline.
+export const OFFLINE_MS = 15 * MINUTE;
 /// A reading is charging when this much more is coming in than going out, as `flow()` has it.
 const CHARGING_WATTS = 5;
 /// Charging stretches closer than this merge; shorter ones than the minimum are dropped.
@@ -69,6 +72,17 @@ export function buckets(run, minutes, origin = 0, exactEnd = false) {
   if (n) points.push([sumT / n, sumSoc / n]);
   if (exactEnd && run.length) points.push([run.at(-1)[0], run.at(-1)[1]]);
   return points;
+}
+
+/// `[start, end]` times the Delta Pro was offline: each gap between readings longer than
+/// `OFFLINE_MS`, and the time since the last one up to `now` if that's as long.
+export function outages(readings, now = Date.now()) {
+  const found = [];
+  readings.forEach(([t], i) => {
+    const next = readings[i + 1]?.[0] ?? now;
+    if (next - t > OFFLINE_MS) found.push([t, next]);
+  });
+  return found;
 }
 
 export const isCharging = ([, , wattsIn, wattsOut]) => wattsIn - wattsOut > CHARGING_WATTS;

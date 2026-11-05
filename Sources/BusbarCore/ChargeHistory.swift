@@ -54,6 +54,9 @@ public enum HistoryRange: String, Sendable, CaseIterable {
 public struct ChargeHistory: Sendable, Equatable {
     /// Readings further apart than this have a gap between them (the logger missed some).
     public static let maxGap: TimeInterval = 5 * 60
+    /// A gap this long means the Delta Pro was offline: the logger only misses a few minutes
+    /// on its own, and records nothing while the device is offline.
+    public static let offlineGap: TimeInterval = 15 * 60
 
     public private(set) var readings: [ChargeReading] = []
 
@@ -75,17 +78,29 @@ public struct ChargeHistory: Sendable, Equatable {
         readings.removeAll { $0.time < start }
     }
 
-    /// Splits readings into runs wherever the logger went quiet.
-    public static func runs(_ readings: [ChargeReading]) -> [[ChargeReading]] {
+    /// Splits readings into runs wherever the logger went quiet for longer than `gap`.
+    public static func runs(_ readings: [ChargeReading], gap: TimeInterval = maxGap) -> [[ChargeReading]] {
         var runs: [[ChargeReading]] = []
         for reading in readings {
-            if let last = runs.last?.last, reading.time.timeIntervalSince(last.time) <= maxGap {
+            if let last = runs.last?.last, reading.time.timeIntervalSince(last.time) <= gap {
                 runs[runs.count - 1].append(reading)
             } else {
                 runs.append([reading])
             }
         }
         return runs
+    }
+
+    /// When the Delta Pro was offline: each gap between readings longer than `offlineGap`,
+    /// and the time since the last one up to `now` if that's as long.
+    public static func outages(_ readings: [ChargeReading], now: Date = .now) -> [DateInterval] {
+        var outages = zip(readings, readings.dropFirst()).compactMap { a, b in
+            b.time.timeIntervalSince(a.time) > offlineGap ? DateInterval(start: a.time, end: b.time) : nil
+        }
+        if let last = readings.last, now.timeIntervalSince(last.time) > offlineGap {
+            outages.append(DateInterval(start: last.time, end: now))
+        }
+        return outages
     }
 
     /// Averages a run into buckets so minute-to-minute noise doesn't show, then ends it on
