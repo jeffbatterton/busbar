@@ -14,7 +14,7 @@ const THRESHOLDS_KEY = "busbar.thresholds";
 const HISTORY_URL = "https://busbar-logger.jeffbatterton.workers.dev";
 
 const $ = (selector) => document.querySelector(selector);
-/// A phone on its side: the dashboard becomes two pages, the chart full screen and then the cards.
+/// A phone on its side: the dashboard is just the chart, full screen.
 const landscape = matchMedia("(orientation: landscape) and (max-height: 500px)");
 const demo = new URLSearchParams(location.search).has("demo");
 
@@ -582,46 +582,12 @@ function unhover() {
 
 function setUpChart() {
   const chart = $("#chart");
-  const move = (point) => hover(point.clientX - $("#chart-svg").getBoundingClientRect().left);
-  // In landscape a touch on the chart may be a swipe to the next page, which those handle below.
-  const pointer = (handler) => (event) => {
-    if (!(landscape.matches && event.pointerType === "touch")) handler(event);
-  };
-  chart.addEventListener("pointerdown", pointer(move));
-  chart.addEventListener("pointermove", pointer(move));
-  chart.addEventListener("pointerleave", pointer(unhover));
-  chart.addEventListener("pointercancel", pointer(unhover));
-  chart.addEventListener("pointerup", pointer((event) => { if (event.pointerType !== "mouse") unhover(); }));
-
-  // The chart fills a page that swipes sideways, so there scrubbing starts with a touch and
-  // hold; a touch that moves first is a swipe.
-  let hold = null, held = false, startX = 0, startY = 0;
-  const release = () => {
-    clearTimeout(hold);
-    if (held) unhover();
-    held = false;
-  };
-  chart.addEventListener("touchstart", (event) => {
-    if (!landscape.matches) return;
-    const touch = event.touches[0];
-    startX = touch.clientX;
-    startY = touch.clientY;
-    held = false;
-    clearTimeout(hold);
-    hold = setTimeout(() => { held = true; move(touch); }, 250);
-  }, { passive: true });
-  chart.addEventListener("touchmove", (event) => {
-    if (!landscape.matches) return;
-    const touch = event.touches[0];
-    if (held) {
-      event.preventDefault();
-      move(touch);
-    } else if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 8) {
-      clearTimeout(hold);
-    }
-  }, { passive: false });
-  chart.addEventListener("touchend", release);
-  chart.addEventListener("touchcancel", release);
+  const move = (event) => hover(event.clientX - $("#chart-svg").getBoundingClientRect().left);
+  chart.addEventListener("pointerdown", move);
+  chart.addEventListener("pointermove", move);
+  chart.addEventListener("pointerleave", unhover);
+  chart.addEventListener("pointercancel", unhover);
+  chart.addEventListener("pointerup", (event) => { if (event.pointerType !== "mouse") unhover(); });
   for (const button of document.querySelectorAll("[data-range]")) {
     button.addEventListener("click", () => {
       state.range = button.dataset.range;
@@ -630,23 +596,6 @@ function setUpChart() {
     });
   }
   addEventListener("resize", () => { if (!$("#dashboard").hidden) renderHistory(); });
-}
-
-/// The dots under the landscape pages: they follow the swiping, and a tap goes to that page.
-function setUpPages() {
-  const content = $("#dashboard .content"), dots = [...document.querySelectorAll("#dots button")];
-  const page = () => Math.round(content.scrollLeft / content.clientWidth) || 0;
-  const sync = () => dots.forEach((dot, i) => dot.classList.toggle("on", i === page()));
-  content.addEventListener("scroll", sync, { passive: true });
-  dots.forEach((dot, i) => dot.addEventListener("click", () => {
-    content.scrollTo({ left: i * content.clientWidth, behavior: "smooth" });
-  }));
-  // Back to the chart on turning the phone, rather than part way along.
-  landscape.addEventListener("change", () => {
-    content.scrollLeft = 0;
-    sync();
-  });
-  sync();
 }
 
 // MARK: Raw values
@@ -731,7 +680,7 @@ function setUpPullToRefresh() {
   let startY = null, distance = 0;
 
   dashboard.addEventListener("touchstart", (event) => {
-    // Landscape pages swipe sideways and don't scroll, so there's nothing to pull down.
+    // The landscape chart fills the screen and doesn't scroll, so there's nothing to pull down.
     startY = window.scrollY <= 0 && !landscape.matches ? event.touches[0].clientY : null;
     distance = 0;
   }, { passive: true });
@@ -778,5 +727,4 @@ for (const row of document.querySelectorAll("[data-output]")) {
 }
 setUpPullToRefresh();
 setUpChart();
-setUpPages();
 launch();
