@@ -11,6 +11,8 @@ struct BusBatteryIcon: View {
     var color: Color
     /// Color of the charge fill; defaults to `color`.
     var fillColor: Color? = nil
+    /// Like the system battery, the frame (outline, roof, wheels) is fainter than the fill.
+    var frameOpacity: Double = 0.4
 
     static let aspectRatio = Geometry.bounds.width / Geometry.bounds.height
 
@@ -22,32 +24,38 @@ struct BusBatteryIcon: View {
             context.translateBy(x: -g.bounds.minX, y: -g.bounds.minY)
             let shading = GraphicsContext.Shading.color(color)
 
-            // Roof: rounded on top, square where it overlaps the body outline.
-            var roof = Path()
-            roof.addRoundedRect(in: CGRect(x: g.roofX, y: g.bodyTop - g.roofHeight,
-                                           width: g.roofWidth, height: g.roofHeight + g.stroke),
-                                cornerRadii: RectangleCornerRadii(topLeading: g.roofRadius, topTrailing: g.roofRadius))
-            context.fill(roof, with: shading)
+            // The frame's parts overlap, so they're drawn in one layer and dimmed
+            // together rather than each at reduced opacity.
+            var frame = context
+            frame.opacity = frameOpacity
+            frame.drawLayer { context in
+                // Roof: rounded on top, square where it overlaps the body outline.
+                var roof = Path()
+                roof.addRoundedRect(in: CGRect(x: g.roofX, y: g.bodyTop - g.roofHeight,
+                                               width: g.roofWidth, height: g.roofHeight + g.stroke),
+                                    cornerRadii: RectangleCornerRadii(topLeading: g.roofRadius, topTrailing: g.roofRadius))
+                context.fill(roof, with: shading)
 
-            // Wheels: half discs hanging below the body.
-            for cx in g.wheelCenters {
-                var wheel = Path()
-                wheel.move(to: CGPoint(x: cx - g.wheelRadius, y: g.bodyBottom - g.stroke))
-                wheel.addLine(to: CGPoint(x: cx - g.wheelRadius, y: g.bodyBottom))
-                wheel.addRelativeArc(center: CGPoint(x: cx, y: g.bodyBottom), radius: g.wheelRadius,
-                                     startAngle: .degrees(180), delta: .degrees(-180))
-                wheel.addLine(to: CGPoint(x: cx + g.wheelRadius, y: g.bodyBottom - g.stroke))
-                wheel.closeSubpath()
-                context.fill(wheel, with: shading)
+                // Wheels: half discs hanging below the body.
+                for cx in g.wheelCenters {
+                    var wheel = Path()
+                    wheel.move(to: CGPoint(x: cx - g.wheelRadius, y: g.bodyBottom - g.stroke))
+                    wheel.addLine(to: CGPoint(x: cx - g.wheelRadius, y: g.bodyBottom))
+                    wheel.addRelativeArc(center: CGPoint(x: cx, y: g.bodyBottom), radius: g.wheelRadius,
+                                         startAngle: .degrees(180), delta: .degrees(-180))
+                    wheel.addLine(to: CGPoint(x: cx + g.wheelRadius, y: g.bodyBottom - g.stroke))
+                    wheel.closeSubpath()
+                    context.fill(wheel, with: shading)
+                }
+
+                // Body outline, stroked inside its bounds.
+                let half = g.stroke / 2
+                let outline = Path(roundedRect: CGRect(x: g.bodyX + half, y: g.bodyTop + half,
+                                                       width: g.bodyWidth - g.stroke,
+                                                       height: g.bodyBottom - g.bodyTop - g.stroke),
+                                   cornerRadius: g.bodyRadius - half)
+                context.stroke(outline, with: shading, lineWidth: g.stroke)
             }
-
-            // Body outline, stroked inside its bounds.
-            let half = g.stroke / 2
-            let outline = Path(roundedRect: CGRect(x: g.bodyX + half, y: g.bodyTop + half,
-                                                   width: g.bodyWidth - g.stroke,
-                                                   height: g.bodyBottom - g.bodyTop - g.stroke),
-                               cornerRadius: g.bodyRadius - half)
-            context.stroke(outline, with: shading, lineWidth: g.stroke)
 
             // Charge fill, inset by stroke + gap, growing left to right.
             let clamped = min(1, max(0, level))
