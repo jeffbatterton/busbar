@@ -237,18 +237,6 @@ extension QuotaParsingTests {
         #expect(points[2] == ChargePoint(time: run.last!.time, stateOfCharge: 24))
     }
 
-    @Test func chargingBandsMergeAndDropBlips() {
-        let history = readings(from: date(3, 6), minutes: 30)            // not charging
-            + readings(from: date(3, 6, 30), minutes: 20, wattsIn: 600)  // charging 20 min
-            + readings(from: date(3, 6, 50), minutes: 5)                 // 5 min cloud
-            + readings(from: date(3, 6, 55), minutes: 20, wattsIn: 600)  // charging again
-            + readings(from: date(3, 7, 15), minutes: 60)
-            + readings(from: date(3, 8, 15), minutes: 4, wattsIn: 600)   // a 4 min blip
-            + readings(from: date(3, 8, 19), minutes: 60)
-        let bands = ChargeHistory.chargingBands(history)
-        #expect(bands == [DateInterval(start: date(3, 6, 30), end: date(3, 7, 15))])
-    }
-
     @Test func historyAppendsOnlyNewerReadingsAndTrims() {
         var history = ChargeHistory()
         #expect(history.nextFetch(from: date(2, 0)) == date(2, 0))

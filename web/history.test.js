@@ -4,7 +4,7 @@ process.env.TZ = "America/Los_Angeles";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { windowBounds, dayStarts, splitRuns, buckets, chargingBands, outages, smooth, HistoryCache } from "./history.js";
+import { windowBounds, dayStarts, splitRuns, buckets, outages, smooth, HistoryCache } from "./history.js";
 
 const MINUTE = 60000;
 const at = (...args) => new Date(...args).getTime();
@@ -43,25 +43,6 @@ test("buckets average, and the run reaching now ends on its exact latest reading
   assert.deepEqual(buckets(run, 10, t, true), [[t + 2.5 * MINUTE, 51], [t + 10 * MINUTE, 60], [t + 12 * MINUTE, 61]]);
   // A latest reading alone in its bucket isn't doubled.
   assert.deepEqual(buckets(run.slice(0, 3), 10, t, true), [[t + 2.5 * MINUTE, 51], [t + 10 * MINUTE, 60]]);
-});
-
-test("charging bands merge across short breaks and drop short stretches", () => {
-  const t = at(2026, 10, 3, 9);
-  const readings = [
-    ...minutes(t, 20, 50, 500),                 // charging 9:00–9:20
-    ...minutes(t + 20 * MINUTE, 10),            // a 10-minute break: merged
-    ...minutes(t + 30 * MINUTE, 10, 50, 500),   // charging 9:30–9:40
-    ...minutes(t + 40 * MINUTE, 20),            // a 20-minute break: kept apart
-    ...minutes(t + 60 * MINUTE, 5, 50, 500),    // 5 minutes: too short, dropped
-    ...minutes(t + 65 * MINUTE, 5, 50, 204),    // in over out by only 4 W: not charging
-  ];
-  assert.deepEqual(chargingBands(readings), [[t, t + 40 * MINUTE]]);
-});
-
-test("charging bands never cross a gap", () => {
-  const t = at(2026, 10, 3, 9);
-  const readings = [...minutes(t, 12, 50, 500), ...minutes(t + 20 * MINUTE, 12, 50, 500)];
-  assert.deepEqual(chargingBands(readings), [[t, t + 11 * MINUTE], [t + 20 * MINUTE, t + 31 * MINUTE]]);
 });
 
 test("the smoothed path never overshoots a flat stretch", () => {

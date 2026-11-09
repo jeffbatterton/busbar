@@ -1,5 +1,5 @@
 import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput } from "./ecoflow.js";
-import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, buckets, chargingBands, isCharging,
+import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, buckets, isCharging,
   splitRuns, outages, OFFLINE_MS,
   smooth, simulatedHistory } from "./history.js";
 
@@ -493,10 +493,6 @@ function renderHistory() {
     parts.push(`<rect x="${f(x(from))}" y="0" width="${f(x(to) - x(from))}" height="${H}" fill="url(#chart-hatch)"/>`);
   }
 
-  // Behind everything, gold wherever power was coming in.
-  for (const [from, to] of chargingBands(readings)) {
-    parts.push(`<rect x="${f(x(from))}" y="0" width="${f(x(to) - x(from))}" height="${H}" fill="rgba(255,199,61,.11)"/>`);
-  }
   for (const soc of large ? [100, 75, 50, 25] : [100, 50]) parts.push(hline(soc, 'stroke="rgba(255,255,255,.07)"'));
   parts.push(hline(0, 'stroke="rgba(255,255,255,.16)"'));
   if (large) {

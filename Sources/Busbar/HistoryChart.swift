@@ -3,8 +3,8 @@ import Charts
 import SwiftUI
 
 /// The charge live, over today or over this week: a smooth line on a fixed 0–100% scale, colored by
-/// height from green down through yellow at the low threshold to red at critical, gold bands
-/// where power was coming in, and a faint dashed line at the low battery threshold. The line
+/// height from green down through yellow at the low threshold to red at critical, and a faint
+/// dashed line at the low battery threshold. The line
 /// runs straight on across the few minutes the logger sometimes misses; where the Delta Pro
 /// was offline it breaks, over a hatched band, with a dotted line from where it left off to
 /// where it came back.
@@ -41,11 +41,6 @@ struct HistoryChart: View {
             .map { ChargeHistory.smoothed($0, bucket: range.bucket) }
         let top = segments.joined().map(\.stateOfCharge).max() ?? 0
         Chart {
-            ForEach(Array(ChargeHistory.chargingBands(readings).enumerated()), id: \.offset) { _, band in
-                RectangleMark(xStart: .value("Time", band.start), xEnd: .value("Time", band.end),
-                              yStart: .value("Charge", 0), yEnd: .value("Charge", 100))
-                    .foregroundStyle(Color.powerIn.opacity(0.11))
-            }
             if isLarge, let limits {
                 ForEach([(0, limits.lowerBound), (limits.upperBound, 100)].filter { $0.0 < $0.1 }, id: \.0) { band in
                     RectangleMark(xStart: .value("Time", window.start), xEnd: .value("Time", window.end),

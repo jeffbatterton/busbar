@@ -1,5 +1,5 @@
 // Battery history from the logger (logger/), and the chart's shaping rules, which
-// match the Mac app's: calendar windows, gaps, smoothing and charging bands.
+// match the Mac app's: calendar windows, gaps, smoothing.
 
 const MINUTE = 60000;
 /// Readings further apart than this are a gap: the line breaks there.
@@ -9,9 +9,6 @@ export const GAP_MS = 5 * MINUTE;
 export const OFFLINE_MS = 15 * MINUTE;
 /// A reading is charging when this much more is coming in than going out, as `flow()` has it.
 const CHARGING_WATTS = 5;
-/// Charging stretches closer than this merge; shorter ones than the minimum are dropped.
-const MERGE_MS = 15 * MINUTE;
-const MIN_BAND_MS = 10 * MINUTE;
 /// Smoothing bucket size per range, in minutes.
 export const BUCKET_MINUTES = { live: 5, day: 10, week: 60 };
 
@@ -86,25 +83,6 @@ export function outages(readings, now = Date.now()) {
 }
 
 export const isCharging = ([, , wattsIn, wattsOut]) => wattsIn - wattsOut > CHARGING_WATTS;
-
-/// `[start, end]` times when power was coming in. A charging reading counts until the next
-/// reading; stretches under 15 minutes apart merge, then any under 10 minutes long are dropped.
-/// Each run is done separately, so a band never spans a gap.
-export function chargingBands(readings) {
-  const bands = [];
-  for (const run of splitRuns(readings)) {
-    const stretches = [];
-    run.forEach((reading, i) => {
-      if (!isCharging(reading)) return;
-      const t = reading[0], end = run[i + 1]?.[0] ?? t;
-      const last = stretches.at(-1);
-      if (last && t - last[1] < MERGE_MS) last[1] = end;
-      else stretches.push([t, end]);
-    });
-    bands.push(...stretches.filter(([start, end]) => end - start >= MIN_BAND_MS));
-  }
-  return bands;
-}
 
 /// An SVG path through `[x, y]` points as a monotone cubic (Fritsch–Carlson), so the curve
 /// never overshoots the readings: no bumps above 100% or below a real low.

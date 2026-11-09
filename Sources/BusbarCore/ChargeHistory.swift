@@ -127,28 +127,6 @@ public struct ChargeHistory: Sendable, Equatable {
         points[points.count - 1] = ChargePoint(time: last.time, stateOfCharge: last.stateOfCharge)
         return points
     }
-
-    /// When power was coming in, ignoring brief blips: stretches under `merge` apart are
-    /// joined, then any shorter than `minimum` are dropped. Never spans a gap.
-    public static func chargingBands(_ readings: [ChargeReading], merge: TimeInterval = 15 * 60,
-                                     minimum: TimeInterval = 10 * 60) -> [DateInterval] {
-        runs(readings).flatMap { run -> [DateInterval] in
-            var bands: [DateInterval] = []
-            var start: Date?
-            for (index, reading) in run.enumerated() {
-                if reading.isCharging, start == nil { start = reading.time }
-                guard let begun = start, !reading.isCharging || index == run.count - 1 else { continue }
-                let end = reading.time
-                if let previous = bands.last, begun.timeIntervalSince(previous.end) < merge {
-                    bands[bands.count - 1] = DateInterval(start: previous.start, end: end)
-                } else {
-                    bands.append(DateInterval(start: begun, end: end))
-                }
-                start = nil
-            }
-            return bands.filter { $0.duration >= minimum }
-        }
-    }
 }
 
 public enum HistoryError: LocalizedError {
