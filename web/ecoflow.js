@@ -172,6 +172,14 @@ export function parseDeltaPro(q, timestamp = new Date()) {
   // The limits set in the EcoFlow app; ignore out-of-range or crossed ones rather than drawing them.
   const low = q["ems.minDsgSoc"] ?? 0, high = q["ems.maxChargeSoc"] ?? 100;
   const validLimits = low >= 0 && low < 100 && high > 0 && high <= 100 && low < high;
+  const dischargeLimit = validLimits ? low : 0, chargeLimit = validLimits ? high : 100;
+
+  // EcoFlow's estimates run to 100% and 0%; scale them to stop at the limits instead.
+  const scaled = (minutes, span, toLimit) => {
+    if (minutes === null || span <= 0) return null;
+    const m = Math.round(minutes * Math.max(0, toLimit) / span);
+    return m > 0 ? m : null;
+  };
 
   return {
     stateOfCharge,
@@ -181,11 +189,11 @@ export function parseDeltaPro(q, timestamp = new Date()) {
     acOutWatts, dc12VOutWatts, acOutputOn, dc12VOutputOn,
     // inv.acInVol is in millivolts; anything over ~80 V means shore power is present.
     shorePowerConnected: (q["inv.acInVol"] ?? 0) > 80000,
-    minutesToFull: plausibleMinutes("ems.chgRemainTime"),
-    minutesToEmpty: plausibleMinutes("ems.dsgRemainTime"),
+    minutesToFull: scaled(plausibleMinutes("ems.chgRemainTime"), 100 - stateOfCharge, chargeLimit - stateOfCharge),
+    minutesToEmpty: scaled(plausibleMinutes("ems.dsgRemainTime"), stateOfCharge, stateOfCharge - dischargeLimit),
     // The levels the battery stops discharging and charging at, 0–100.
-    dischargeLimit: validLimits ? low : 0,
-    chargeLimit: validLimits ? high : 100,
+    dischargeLimit,
+    chargeLimit,
     batteries,
     warnings,
     timestamp,

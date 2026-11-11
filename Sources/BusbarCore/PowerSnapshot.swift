@@ -133,14 +133,22 @@ extension PowerSnapshot {
             guard let m = q.int(key), m > 0, m < 5999 else { return nil }
             return m
         }
-        minutesToFull = plausibleMinutes("ems.chgRemainTime")
-        minutesToEmpty = plausibleMinutes("ems.dsgRemainTime")
 
         // Ignore out-of-range or crossed limits rather than drawing them.
         let low = q["ems.minDsgSoc"] ?? 0, high = q["ems.maxChargeSoc"] ?? 100
         let validLimits = (0..<100).contains(low) && (1...100).contains(high) && low < high
         dischargeLimit = validLimits ? low : 0
         chargeLimit = validLimits ? high : 100
+
+        // EcoFlow's estimates run to 100% and 0%; scale them to stop at the limits instead.
+        let soc = stateOfCharge
+        func scaled(_ minutes: Int?, _ span: Double, _ toLimit: Double) -> Int? {
+            guard let minutes, span > 0 else { return nil }
+            let m = Int((Double(minutes) * max(0, toLimit) / span).rounded())
+            return m > 0 ? m : nil
+        }
+        minutesToFull = scaled(plausibleMinutes("ems.chgRemainTime"), 100 - soc, chargeLimit - soc)
+        minutesToEmpty = scaled(plausibleMinutes("ems.dsgRemainTime"), soc, soc - dischargeLimit)
 
         // ems.bmsNOnline bit 0 is the pack's hardware-online signal.
         var batteries = [Battery(name: "Main",

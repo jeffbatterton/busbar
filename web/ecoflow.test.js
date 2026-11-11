@@ -45,3 +45,12 @@ test("reads the charge and discharge limits, ignoring crossed ones", () => {
   assert.equal(crossed.dischargeLimit, 0);
   assert.equal(crossed.chargeLimit, 100);
 });
+
+test("times left run to the limits, not 0% and 100%", () => {
+  const limits = { "ems.f32LcdShowSoc": 50, "ems.minDsgSoc": 5, "ems.maxChargeSoc": 90 };
+  const s = parseDeltaPro({ ...limits, "ems.dsgRemainTime": 500, "ems.chgRemainTime": 500 });
+  assert.equal(s.minutesToEmpty, 450);
+  assert.equal(s.minutesToFull, 400);
+  const past = parseDeltaPro({ ...limits, "ems.f32LcdShowSoc": 95, "ems.chgRemainTime": 60 });
+  assert.equal(past.minutesToFull, null);
+});

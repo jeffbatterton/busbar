@@ -48,6 +48,15 @@ import Testing
         #expect(crossed.chargeLimit == 100)
     }
 
+    @Test func timesLeftRunToTheLimits() {
+        let limits: [String: Double] = ["ems.f32LcdShowSoc": 50, "ems.minDsgSoc": 5, "ems.maxChargeSoc": 90]
+        let s = PowerSnapshot(deltaPro: Quotas(limits.merging(["ems.dsgRemainTime": 500, "ems.chgRemainTime": 500]) { $1 }))
+        #expect(s.minutesToEmpty == 450)
+        #expect(s.minutesToFull == 400)
+        let past = PowerSnapshot(deltaPro: Quotas(limits.merging(["ems.f32LcdShowSoc": 95, "ems.chgRemainTime": 60]) { $1 }))
+        #expect(past.minutesToFull == nil)
+    }
+
     @Test func extraBatteryDischargeIsNotOtherInput() {
         // Real reading: 427 W in, 393 W solar, extra battery discharging 37 W, engine off.
         let s = PowerSnapshot(deltaPro: Quotas(["pd.wattsInSum": 427, "mppt.inWatts": 3930,
