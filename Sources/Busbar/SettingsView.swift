@@ -16,7 +16,7 @@ struct SettingsView: View {
     @State private var pane: Pane = .account
 
     enum Pane: String, CaseIterable, Identifiable {
-        case account, history, alerts, connection, general
+        case account, history, alerts, limits, connection, general
         var id: Self { self }
 
         var title: String {
@@ -24,6 +24,7 @@ struct SettingsView: View {
             case .account: "EcoFlow account"
             case .history: "Battery history"
             case .alerts: "Battery alerts"
+            case .limits: "Charge limits"
             case .connection: "Connection"
             case .general: "General"
             }
@@ -34,6 +35,7 @@ struct SettingsView: View {
             case .account: "key"
             case .history: "chart.xyaxis.line"
             case .alerts: "bell"
+            case .limits: "battery.75percent"
             case .connection: "antenna.radiowaves.left.and.right"
             case .general: "gearshape"
             }
@@ -94,6 +96,21 @@ struct SettingsView: View {
                 Toggle("Notify when battery is low", isOn: $settings.notifyBattery)
                 Toggle("Notify about faults and warnings", isOn: $settings.notifyWarnings)
                 Toggle("Notify when shore power connects or drops", isOn: $settings.notifyShorePower)
+            }
+        case .limits:
+            Section {
+                if let snapshot = monitor.snapshot {
+                    LimitSlider(dischargeLimit: snapshot.dischargeLimit, chargeLimit: snapshot.chargeLimit,
+                                isEnabled: monitor.settingLimits.isEmpty) { limit, percent in
+                        monitor.setLimit(limit, to: percent)
+                    }
+                    .padding(.vertical, 6)
+                } else {
+                    Text("Connect to the Delta Pro to set its limits.").foregroundStyle(.secondary)
+                }
+            } footer: {
+                Text("The Delta Pro stops discharging at the left thumb and charging at the right one, the same limits as in the EcoFlow app. Discharge can go from 0 to 30%, charge from 50 to 100%.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         case .connection:
             Section {

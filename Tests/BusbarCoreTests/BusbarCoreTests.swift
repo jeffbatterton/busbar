@@ -99,6 +99,22 @@ extension QuotaParsingTests {
         #expect(s.batteries.map(\.isAvailable) == [true, false])
     }
 
+    @Test func simulatorReportsLimitsItIsSet() async throws {
+        let source = SimulatedDeltaProSource()
+        try await source.setLimit(.discharge, to: 20)
+        try await source.setLimit(.charge, to: 80)
+        let s = try await source.snapshot()
+        #expect(s.dischargeLimit == 20)
+        #expect(s.chargeLimit == 80)
+    }
+
+    @Test func offlineBatteryAndBatteryFaultsAreUrgent() {
+        let s = PowerSnapshot(deltaPro: Quotas(["ems.bms0Online": 3, "ems.bms1Online": 0,
+                                                "bmsMaster.errCode": 52, "inv.errCode": 7]))
+        #expect(s.urgentProblems == ["Extra battery offline", "Battery fault (52)"])
+        #expect(s.otherWarnings == ["Inverter fault (7)"])
+    }
+
     @Test func outputsOnBySwitchOrDraw() {
         let switchedOn = PowerSnapshot(deltaPro: Quotas(["inv.cfgAcEnabled": 1, "mppt.carState": 0]))
         #expect(switchedOn.acOutputOn && !switchedOn.dc12VOutputOn)
@@ -177,6 +193,29 @@ extension QuotaParsingTests {
         #expect(engine.checkStaleness(lastUpdate: last, now: last.addingTimeInterval(700), settings: settings)?.title == "Bus is offline")
         #expect(engine.checkStaleness(lastUpdate: last, now: last.addingTimeInterval(900), settings: settings) == nil)
         #expect(engine.evaluate(snapshot(soc: 70), settings: settings).map(\.title) == ["Bus is back online"])
+    }
+
+    @Test func warningNotifiesOnceADayEvenIfItFlickers() {
+        var engine = AlertEngine()
+        let fault = PowerSnapshot(deltaPro: Quotas(["ems.f32LcdShowSoc": 60, "bmsMaster.errCode": 6]))
+        let clear = PowerSnapshot(deltaPro: Quotas(["ems.f32LcdShowSoc": 60]))
+        let start = Date(timeIntervalSince1970: 0)
+        #expect(engine.evaluate(fault, settings: settings, now: start).map(\.body) == ["Battery fault (6)"])
+        #expect(engine.evaluate(clear, settings: settings, now: start.addingTimeInterval(60)).isEmpty)
+        #expect(engine.evaluate(fault, settings: settings, now: start.addingTimeInterval(120)).isEmpty)
+        #expect(engine.evaluate(fault, settings: settings, now: start.addingTimeInterval(23 * 3600)).isEmpty)
+        #expect(engine.evaluate(fault, settings: settings, now: start.addingTimeInterval(24 * 3600)).map(\.body) == ["Battery fault (6)"])
+    }
+
+    @Test func extraBatteryOfflineFiresOnceThenRecovers() {
+        var engine = AlertEngine()
+        func packs(extraOnline: Bool) -> PowerSnapshot {
+            PowerSnapshot(deltaPro: Quotas(["ems.f32LcdShowSoc": 60, "ems.bms1Online": extraOnline ? 3 : 0]))
+        }
+        #expect(engine.evaluate(packs(extraOnline: true), settings: settings).isEmpty)
+        #expect(engine.evaluate(packs(extraOnline: false), settings: settings).map(\.title) == ["Extra battery offline"])
+        #expect(engine.evaluate(packs(extraOnline: false), settings: settings).isEmpty)
+        #expect(engine.evaluate(packs(extraOnline: true), settings: settings).map(\.title) == ["Extra battery back online"])
     }
 }
 

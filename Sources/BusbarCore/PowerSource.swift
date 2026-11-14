@@ -5,10 +5,27 @@ public enum PowerOutput: Sendable, Hashable {
     case ac, dc12V
 }
 
+/// The levels the battery stops at, as set in the EcoFlow app.
+public enum ChargeLimit: Sendable, Hashable {
+    /// The level it stops discharging at.
+    case discharge
+    /// The level it stops charging at.
+    case charge
+
+    /// What the Delta Pro accepts, in percent.
+    public var range: ClosedRange<Double> {
+        switch self {
+        case .discharge: 0...30
+        case .charge: 50...100
+        }
+    }
+}
+
 /// Anything that can produce a snapshot of the electrical system.
 public protocol PowerSource: Sendable {
     func snapshot() async throws -> PowerSnapshot
     func setOutput(_ output: PowerOutput, on: Bool) async throws
+    func setLimit(_ limit: ChargeLimit, to percent: Int) async throws
 }
 
 public struct EcoFlowDeltaProSource: PowerSource {
@@ -34,6 +51,14 @@ public struct EcoFlowDeltaProSource: PowerSource {
         }
         try await client.setQuota(["id": id, "enabled": on ? 1 : 0])
     }
+
+    public func setLimit(_ limit: ChargeLimit, to percent: Int) async throws {
+        // Delta Pro command ids: 49 is the charge limit, 51 the discharge limit.
+        switch limit {
+        case .charge: try await client.setQuota(["id": 49, "maxChgSoc": percent])
+        case .discharge: try await client.setQuota(["id": 51, "minDsgSoc": percent])
+        }
+    }
 }
 
 /// Fake Delta Pro data for running the app without API access. It emits raw quota
@@ -54,6 +79,8 @@ public actor SimulatedDeltaProSource: PowerSource {
     private var lastTick: Date?
     private var acOn = true
     private var dc12VOn = true
+    private var dischargeLimit = 10
+    private var chargeLimit = 90
     /// Speeds up battery drain/charge so changes are visible while testing.
     private let timeScale: Double
     // Delta Pro (3.6 kWh) + one extra battery (3.6 kWh).
@@ -75,6 +102,13 @@ public actor SimulatedDeltaProSource: PowerSource {
         switch output {
         case .ac: acOn = on
         case .dc12V: dc12VOn = on
+        }
+    }
+
+    public func setLimit(_ limit: ChargeLimit, to percent: Int) async throws {
+        switch limit {
+        case .discharge: dischargeLimit = percent
+        case .charge: chargeLimit = percent
         }
     }
 
@@ -129,6 +163,8 @@ public actor SimulatedDeltaProSource: PowerSource {
             "pd.carWatts": Double(dc12V),
             "ems.chgRemainTime": Double(toFull),
             "ems.dsgRemainTime": Double(toEmpty),
+            "ems.minDsgSoc": Double(dischargeLimit),
+            "ems.maxChargeSoc": Double(chargeLimit),
         ])
         if extraBatteryConnected {
             quotas.merge(Quotas(["bmsSlave1.f32ShowSoc": max(0, soc - 1.5), "bmsSlave1.temp": 26,

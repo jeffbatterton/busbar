@@ -23,6 +23,10 @@ final class Monitor {
     private(set) var switchingOutputs: Set<PowerOutput> = []
     /// States just switched to, shown until the device reports them (it lags a few seconds).
     private var expectedOutputs: [PowerOutput: (on: Bool, until: Date)] = [:]
+    /// Limits with a set command in flight.
+    private(set) var settingLimits: Set<ChargeLimit> = []
+    /// Limits just set, shown until the device reports them.
+    private var expectedLimits: [ChargeLimit: (percent: Double, until: Date)] = [:]
 
     let settings: AppSettings
     private var alerts = AlertEngine()
@@ -38,6 +42,7 @@ final class Monitor {
 
     init(settings: AppSettings) {
         self.settings = settings
+        alerts.warningsNotified = UserDefaults.standard.dictionary(forKey: "warningsNotified") as? [String: Date] ?? [:]
     }
 
     var isSimulated: Bool { settings.useSimulatedData || !settings.credentials.isComplete }
@@ -82,6 +87,28 @@ final class Monitor {
                 expectedOutputs[output] = nil
                 snapshot?.restore(output, from: before)
                 lastError = "Couldn't switch \(on ? "on" : "off"): \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Sets a charge limit, showing it before the command is sent and putting the old one
+    /// back if it fails.
+    func setLimit(_ limit: ChargeLimit, to percent: Int) {
+        guard let before = snapshot?.value(of: limit), Double(percent) != before else { return }
+        settingLimits.insert(limit)
+        expectedLimits[limit] = (Double(percent), .now.addingTimeInterval(20))
+        snapshot?.setLimit(limit, to: Double(percent))
+        Task {
+            defer { settingLimits.remove(limit) }
+            do {
+                try await source.setLimit(limit, to: percent)
+                lastError = nil
+                try? await Task.sleep(for: .seconds(3))
+                refreshNow()
+            } catch {
+                expectedLimits[limit] = nil
+                snapshot?.setLimit(limit, to: before)
+                lastError = "Couldn't set the \(limit == .charge ? "charge" : "discharge") limit: \(error.localizedDescription)"
             }
         }
     }
@@ -139,11 +166,19 @@ final class Monitor {
                     snapshot.setOn(output, expected.on)
                 }
             }
+            for (limit, expected) in expectedLimits {
+                if snapshot.value(of: limit) == expected.percent || expected.until < .now {
+                    expectedLimits[limit] = nil
+                } else {
+                    snapshot.setLimit(limit, to: expected.percent)
+                }
+            }
             self.snapshot = snapshot
             lastUpdate = .now
             lastError = nil
             isDeviceOffline = false
             notify(alerts.evaluate(snapshot, settings: settings.alertSettings))
+            UserDefaults.standard.set(alerts.warningsNotified, forKey: "warningsNotified")
         } catch is CancellationError {
             return
         } catch {
