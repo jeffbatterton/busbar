@@ -46,13 +46,18 @@ public struct AlertEngine: Sendable {
     static let hysteresis = 3.0
 
     private var batteryLevel: BatteryLevel = .normal
-    private var activeWarnings: Set<String> = []
+    /// When each warning last notified. A fault can come and go between readings, so
+    /// one notifies at most once a day, however often it reappears or however long it lasts.
+    /// Kept by the app across launches, so a restart doesn't notify again either.
+    public var warningsNotified: [String: Date] = [:]
+    static let warningRepeat: TimeInterval = 24 * 60 * 60
+    private var offlineBatteries: Set<String> = []
     private var shorePower: Bool?
     private var isOffline = false
 
     public init() {}
 
-    public mutating func evaluate(_ snapshot: PowerSnapshot, settings: AlertSettings) -> [Alert] {
+    public mutating func evaluate(_ snapshot: PowerSnapshot, settings: AlertSettings, now: Date = .now) -> [Alert] {
         var alerts: [Alert] = []
 
         if isOffline {
@@ -78,13 +83,26 @@ public struct AlertEngine: Sendable {
             batteryLevel = max(level, recovered)
         }
 
-        let warnings = Set(snapshot.warnings)
+        warningsNotified = warningsNotified.filter { now.timeIntervalSince($0.value) < Self.warningRepeat }
         if settings.notifyWarnings {
-            for warning in warnings.subtracting(activeWarnings).sorted() {
+            for warning in Set(snapshot.warnings).sorted() where warningsNotified[warning] == nil {
                 alerts.append(Alert(title: "Bus power warning", body: warning))
+                warningsNotified[warning] = now
             }
         }
-        activeWarnings = warnings
+
+        let offline = Set(snapshot.batteries.filter { !$0.isAvailable }.map(\.name))
+        if settings.notifyWarnings {
+            for name in offline.subtracting(offlineBatteries).sorted() {
+                alerts.append(Alert(title: "\(name) battery offline",
+                                    body: "The Delta Pro has lost the \(name.lowercased()) battery. Check it now."))
+            }
+            for name in offlineBatteries.subtracting(offline).sorted()
+            where snapshot.batteries.contains(where: { $0.name == name }) {
+                alerts.append(Alert(title: "\(name) battery back online", body: "The Delta Pro sees it again."))
+            }
+        }
+        offlineBatteries = offline
 
         if let previous = shorePower, previous != snapshot.shorePowerConnected, settings.notifyShorePower {
             alerts.append(snapshot.shorePowerConnected
