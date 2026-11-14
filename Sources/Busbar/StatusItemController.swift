@@ -39,11 +39,23 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         screen = { [weak self] in self?.panel.screen }
 
         host.sizingOptions = .preferredContentSize
-        panel.contentViewController = host
+        // The panel is borderless and sized only by positionPanel(). As its content view
+        // controller, or with safe areas, the hosting view and the window resize each other
+        // while the content changes size, until AppKit gives up and throws (when a fault
+        // appeared it crashed on launch).
+        host.safeAreaRegions = []
+        let container = NSView()
+        host.view.frame = container.bounds
+        host.view.autoresizingMask = [.width, .height]
+        container.addSubview(host.view)
+        panel.contentView = container
         panel.delegate = self
         panel.onCancel = { [weak self] in self?.closePanel() }
         sizeObservation = host.observe(\.preferredContentSize) { [weak self] _, _ in
-            Task { @MainActor in self?.positionPanel() }
+            Task { @MainActor in
+                guard let self, self.panel.isVisible else { return }
+                self.positionPanel()
+            }
         }
 
         guard let button = item.button else { return }
