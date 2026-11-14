@@ -200,6 +200,20 @@ export function parseDeltaPro(q, timestamp = new Date()) {
   };
 }
 
+/// Problems to deal with right away, for the banner at the top: a battery gone offline,
+/// or a battery fault.
+export function urgentProblems(s) {
+  return [...s.batteries.filter((b) => !b.isAvailable).map((b) => `${b.name} battery offline`),
+    ...s.warnings.filter(isBatteryFault)];
+}
+
+/// The warnings not in urgentProblems().
+export function otherWarnings(s) {
+  return s.warnings.filter((w) => !isBatteryFault(w));
+}
+
+const isBatteryFault = (warning) => warning.startsWith("Battery");
+
 export function flow(s) {
   const net = s.wattsIn - s.wattsOut;
   return net > 5 ? "charging" : net < -5 ? "discharging" : "idle";

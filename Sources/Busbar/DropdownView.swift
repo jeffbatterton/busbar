@@ -22,6 +22,7 @@ struct DropdownView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let snapshot = monitor.snapshot {
+                if !snapshot.urgentProblems.isEmpty { urgentBanner(snapshot.urgentProblems) }
                 header(snapshot)
                 Divider()
                 if layout == .dropdown, monitor.settings.historyClient != nil {
@@ -40,7 +41,7 @@ struct DropdownView: View {
                               watts: snapshot.dc12VOutWatts, isOn: snapshot.dc12VOutputOn)
                 }
                 batteries(snapshot)
-                if !snapshot.warnings.isEmpty { warnings(snapshot.warnings) }
+                if !snapshot.otherWarnings.isEmpty { warnings(snapshot.otherWarnings) }
             } else {
                 placeholder
             }
@@ -182,6 +183,23 @@ struct DropdownView: View {
         }
         .font(.callout)
         .frame(height: Self.rowHeight)
+    }
+
+    /// A battery offline or faulted, in red above everything else, as it needs dealing with now.
+    private func urgentBanner(_ problems: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(problems, id: \.self) { problem in
+                Label { Text(problem) } icon: { Iconoir.warningTriangleSolid.image(size: 16) }
+            }
+        }
+        .font(.callout.weight(.semibold))
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.red, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func warnings(_ items: [String]) -> some View {

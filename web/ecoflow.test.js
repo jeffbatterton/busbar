@@ -1,7 +1,7 @@
 // Run with: node --test web/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { signature, parseDeltaPro, withOutput, restoreOutput } from "./ecoflow.js";
+import { signature, parseDeltaPro, withOutput, restoreOutput, urgentProblems, otherWarnings } from "./ecoflow.js";
 
 test("signature matches the reference implementation", async () => {
   // Reference: hmac.new(b"secret", b"sn=DCABZ123&accessKey=AK&nonce=345164&timestamp=1681872798000", sha256)
@@ -53,4 +53,10 @@ test("times left run to the limits, not 0% and 100%", () => {
   assert.equal(s.minutesToFull, 400);
   const past = parseDeltaPro({ ...limits, "ems.f32LcdShowSoc": 95, "ems.chgRemainTime": 60 });
   assert.equal(past.minutesToFull, null);
+});
+
+test("an offline extra battery and battery faults go in the banner, other warnings below", () => {
+  const s = parseDeltaPro({ "ems.bms0Online": 3, "ems.bms1Online": 0, "bmsMaster.errCode": 52, "inv.errCode": 7 });
+  assert.deepEqual(urgentProblems(s), ["Extra battery offline", "Battery fault (52)"]);
+  assert.deepEqual(otherWarnings(s), ["Inverter fault (7)"]);
 });

@@ -1,4 +1,5 @@
-import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput } from "./ecoflow.js";
+import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput,
+  urgentProblems, otherWarnings } from "./ecoflow.js";
 import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, buckets, isCharging,
   splitRuns, outages, OFFLINE_MS,
   smooth, simulatedHistory } from "./history.js";
@@ -295,13 +296,10 @@ function render() {
 
   $("#dash-error").hidden = !state.error;
   $("#dash-error span").textContent = state.error ?? "";
-  $("#warnings").replaceChildren(...s.warnings.map((text) => {
-    const row = document.createElement("p");
-    row.className = "warning";
-    row.innerHTML = '<svg class="ic"><use href="#i-warning"/></svg><span></span>';
-    row.querySelector("span").textContent = text;
-    return row;
-  }));
+  const problems = urgentProblems(s);
+  $("#urgent").hidden = problems.length === 0;
+  $("#urgent").replaceChildren(...problems.map((text) => warningRow(text)));
+  $("#warnings").replaceChildren(...otherWarnings(s).map((text) => warningRow(text, "warning")));
 
   $("#watts-in").textContent = watts(s.wattsIn);
   for (const row of document.querySelectorAll("[data-input]")) {
@@ -328,6 +326,14 @@ function render() {
 
   renderBatteries(s);
   renderHistory();
+}
+
+function warningRow(text, className = "") {
+  const row = document.createElement("p");
+  row.className = className;
+  row.innerHTML = '<svg class="ic"><use href="#i-warning"/></svg><span></span>';
+  row.querySelector("span").textContent = text;
+  return row;
 }
 
 /// The charge bar: solid from the discharge limit to the level, striped past either limit.

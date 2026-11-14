@@ -60,6 +60,18 @@ public struct PowerSnapshot: Sendable, Equatable {
 
     public var netWatts: Int { wattsIn - wattsOut }
 
+    /// Problems to deal with right away, for the banner at the top: a battery gone offline,
+    /// or a battery fault. They're also left in `warnings`, which the notifications go by.
+    public var urgentProblems: [String] {
+        batteries.filter { !$0.isAvailable }.map { "\($0.name) battery offline" }
+            + warnings.filter(Self.isBatteryFault)
+    }
+
+    /// The warnings not in `urgentProblems`.
+    public var otherWarnings: [String] { warnings.filter { !Self.isBatteryFault($0) } }
+
+    private static func isBatteryFault(_ warning: String) -> Bool { warning.hasPrefix("Battery") }
+
     public func isOn(_ output: PowerOutput) -> Bool {
         switch output {
         case .ac: acOutputOn
@@ -78,6 +90,20 @@ public struct PowerSnapshot: Sendable, Equatable {
         switch output {
         case .ac: wattsOut -= acOutWatts; acOutWatts = 0
         case .dc12V: wattsOut -= dc12VOutWatts; dc12VOutWatts = 0
+        }
+    }
+
+    public func value(of limit: ChargeLimit) -> Double {
+        switch limit {
+        case .discharge: dischargeLimit
+        case .charge: chargeLimit
+        }
+    }
+
+    public mutating func setLimit(_ limit: ChargeLimit, to percent: Double) {
+        switch limit {
+        case .discharge: dischargeLimit = percent
+        case .charge: chargeLimit = percent
         }
     }
 
