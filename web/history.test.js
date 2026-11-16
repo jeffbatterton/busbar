@@ -4,7 +4,7 @@ process.env.TZ = "America/Los_Angeles";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { windowBounds, dayStarts, splitRuns, buckets, outages, smooth, HistoryCache } from "./history.js";
+import { windowBounds, pageWindow, windowTitle, dayStarts, splitRuns, buckets, outages, smooth, HistoryCache } from "./history.js";
 
 const MINUTE = 60000;
 const at = (...args) => new Date(...args).getTime();
@@ -18,6 +18,22 @@ test("today runs midnight to midnight, even on the day the clocks go back", () =
   assert.equal(start, at(2026, 10, 1));
   assert.equal(end, at(2026, 10, 2));
   assert.equal(end - start, 25 * 3600000);
+});
+
+test("pages back a day or a week; live doesn't page", () => {
+  // A day back from Monday 2 November is the 25-hour Sunday.
+  const yesterday = pageWindow("day", 1, new Date(2026, 10, 2, 9));
+  assert.deepEqual(yesterday, { start: at(2026, 10, 1), end: at(2026, 10, 2) });
+  assert.deepEqual(pageWindow("week", 1, new Date(2026, 10, 8, 23)), { start: at(2026, 9, 26), end: at(2026, 10, 2) });
+  assert.deepEqual(pageWindow("live", 3, new Date(2026, 10, 2, 9)), windowBounds("live", new Date(2026, 10, 2, 9)));
+});
+
+test("titles name the day, or the week's first and last days", () => {
+  const now = new Date(2026, 10, 16, 15);
+  assert.equal(windowTitle("day", pageWindow("day", 2, now), now, "en-US"), "Sat, Nov 14");
+  assert.equal(windowTitle("live", windowBounds("live", now), now, "en-US"), "Mon, Nov 16");
+  assert.equal(windowTitle("week", windowBounds("week", now), now, "en-US"), "Nov 16 – 22");
+  assert.equal(windowTitle("week", pageWindow("week", 3, now), now, "en-US"), "Oct 26 – Nov 1");
 });
 
 test("this week runs Monday to Monday, with Sunday the last day", () => {

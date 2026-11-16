@@ -68,6 +68,8 @@
     <symbol id="i-warning" viewBox="0 0 24 24">
       <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M9.61617 3.6419C10.6736 1.80296 13.3268 1.80296 14.3841 3.6419L22.4271 17.6296C23.4813 19.463 22.1579 21.7504 20.0431 21.7504H3.95721C1.84242 21.7504 0.519055 19.463 1.57322 17.6296L9.61617 3.6419ZM12 8.25C12.4142 8.25 12.75 8.58579 12.75 9V13C12.75 13.4142 12.4142 13.75 12 13.75C11.5858 13.75 11.25 13.4142 11.25 13V9C11.25 8.58579 11.5858 8.25 12 8.25ZM12.5675 17.5008C12.8446 17.1929 12.8196 16.7187 12.5117 16.4416C12.2038 16.1645 11.7296 16.1894 11.4525 16.4973L11.4425 16.5084C11.1654 16.8163 11.1904 17.2905 11.4983 17.5676C11.8062 17.8447 12.2804 17.8197 12.5575 17.5119L12.5675 17.5008Z"/>
     </symbol>
+    <symbol id="i-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
     <symbol id="i-xmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M9.17218 14.8284L12.0006 12M14.829 9.17157L12.0006 12M12.0006 12L9.17218 9.17157M12.0006 12L14.829 14.8284"/>
       <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/>
@@ -147,9 +149,15 @@
     <p id="dash-error" class="error-row" hidden><svg class="ic"><use href="#i-xmark"/></svg><span></span></p>
     <div id="warnings"></div>
 
-    <!-- The charge over today or this week, from the logger. Drawn by renderHistory(). -->
+    <!-- The charge over a day or a week, from the logger, paged back with the arrows. Drawn by renderHistory(). -->
     <div id="history" class="card" hidden>
-      <div class="card-h">Battery<span id="history-soc" class="num"></span><span class="spacer"></span>
+      <div class="card-h"><span class="history-title">Battery<span id="history-soc" class="num"></span></span>
+        <div class="pager">
+          <button id="history-back" class="chev" aria-label="Earlier"><svg><use href="#i-left"/></svg></button>
+          <span id="history-when" class="num"></span>
+          <button id="history-forward" class="chev" aria-label="Later"><svg><use href="#i-right"/></svg></button>
+        </div>
+        <span class="spacer"></span>
         <div class="seg" role="group" aria-label="Chart range">
           <button data-range="live">Live</button><button data-range="day">24h</button><button data-range="week">7d</button>
         </div>

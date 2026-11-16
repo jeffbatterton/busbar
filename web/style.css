@@ -165,7 +165,19 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 .unavailable .pct { color: var(--text-2); }
 
 /* Battery history. The chart's colors are set in renderHistory(), to match the Mac app's. */
-#history .card-h { align-items: center; padding-bottom: 8px; }
+/* The pager's arrows are taller than the text, so the header pads less around them. */
+#history .card-h { align-items: center; padding: 8px 0 4px; }
+/* ‹ Mon, Nov 16 ›: the window shown. In portrait it stands in for the "Battery" overline. */
+.history-title { display: none; }
+.pager { display: flex; align-items: center; margin-left: -8px; }
+#history-when { min-width: 92px; text-align: center; color: var(--text-2); }
+.chev { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--text-2); }
+.chev:active { background: rgba(255, 255, 255, 0.08); }
+.chev:disabled { opacity: 0.25; pointer-events: none; }
+.chev svg { width: 14px; height: 14px; }
+.live .chev { display: none; }
+.live .pager { margin-left: 0; }
+.live #history-when { min-width: 0; }
 .seg { display: flex; padding: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.08);
        text-transform: none; letter-spacing: 0; }
 .seg button { padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--text-2);
@@ -189,15 +201,17 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 
 /* Landscape on a phone: just the chart, filling the screen. The header, level, cards and
    footer are left out; the chart's overline carries the level. */
-#history-soc { display: none; }
 @media (orientation: landscape) and (max-height: 500px) {
   #dashboard .content { max-width: none; height: 100dvh; padding: 0; overflow: hidden; }
   #dashboard .content > :not(#history), #pull { display: none !important; }
   #history { flex: 1; display: flex; flex-direction: column; background: none; border-radius: 0;
              padding: calc(env(safe-area-inset-top) + 14px) calc(env(safe-area-inset-right) + 6px)
                       calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 6px); }
-  #history .card-h { padding-top: 0; }
-  #history-soc { display: inline; color: var(--text); margin-left: 6px; }
+  #history .card-h { position: relative; padding-top: 0; }
+  .history-title { display: inline; }
+  #history-soc { color: var(--text); margin-left: 6px; }
+  #history .pager { position: absolute; left: 50%; top: calc(50% - 2px); transform: translate(-50%, -50%); margin: 0; }
+  #history-when { color: var(--text); }
   #history .chart { flex: 1; min-height: 0; padding-bottom: 0; }
   #history .chart svg { height: 100%; }
   .tip .w { display: block; font-size: 11px; }

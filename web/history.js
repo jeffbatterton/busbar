@@ -28,6 +28,23 @@ export function windowBounds(range, date = new Date()) {
   return { start: start.getTime(), end: end.getTime() };
 }
 
+/// The window `page` before the one containing `date`: yesterday or last week at 1. Live
+/// doesn't page.
+export function pageWindow(range, page, date = new Date()) {
+  const earlier = new Date(date);
+  if (range !== "live") earlier.setDate(earlier.getDate() - page * (range === "week" ? 7 : 1));
+  return windowBounds(range, earlier);
+}
+
+/// The day shown, "Mon, Nov 16" (today's for Live), or the week's days, "Nov 16 – 22".
+export function windowTitle(range, { start, end }, now = new Date(), locale = undefined) {
+  const day = (t, options) => new Date(t).toLocaleDateString(locale, options);
+  if (range !== "week") return day(range === "live" ? now : start, { weekday: "short", month: "short", day: "numeric" });
+  const first = new Date(start), last = new Date(end - 1);
+  const sameMonth = first.getMonth() === last.getMonth();
+  return `${day(start, { month: "short", day: "numeric" })} – ${day(end - 1, sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" })}`;
+}
+
 /// The local midnights from `start`, `count` + 1 of them so the last day's end is included.
 export function dayStarts(start, count) {
   const day = new Date(start);
@@ -109,7 +126,10 @@ export class HistoryCache {
   simulated = false;
   /// The Mac app's `{ lowThreshold, criticalThreshold }`, once fetched.
   thresholds = null;
+  /// Earlier days' and weeks' readings, fetched once as the chart pages back, by window start.
+  past = new Map();
   #pending = null;
+  #pastPending = new Map();
 
   /// Without a `url` nothing is fetched; the demo seeds `readings` and appends instead.
   constructor({ url = "", token = "", readings = [], fetch = (...args) => globalThis.fetch(...args),
@@ -128,6 +148,25 @@ export class HistoryCache {
   append(readings) {
     const last = this.readings.at(-1)?.[0] ?? -Infinity;
     this.readings = this.readings.concat(readings.filter(([t]) => t > last));
+  }
+
+  /// Fetches an earlier window's readings once; the past doesn't change. Takes in 11 hours
+  /// either side, so an outage running across its edges shows as it was (a week and both
+  /// sides stay within the logger's 8 days a request). A failure is retried next time.
+  loadPast({ start, end }) {
+    if (this.past.has(start) || !this.url) return Promise.resolve();
+    if (!this.#pastPending.has(start)) {
+      const margin = 11 * 3600000;
+      this.#pastPending.set(start, (async () => {
+        try {
+          const response = await this.fetch(`${this.url}/readings?since=${start - margin}&until=${end + margin}`, {
+            headers: { Authorization: `Bearer ${this.token}` }, signal: AbortSignal.timeout(20000),
+          });
+          if (response.ok) this.past.set(start, (await response.json()).readings);
+        } catch {}
+      })().finally(() => this.#pastPending.delete(start)));
+    }
+    return this.#pastPending.get(start);
   }
 
   async #load() {

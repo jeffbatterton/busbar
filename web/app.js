@@ -1,6 +1,6 @@
 import { DeltaProSource, SimulatedSource, flow, isOn, withOutput, restoreOutput,
   urgentProblems, otherWarnings } from "./ecoflow.js";
-import { HistoryCache, BUCKET_MINUTES, windowBounds, dayStarts, buckets, isCharging,
+import { HistoryCache, BUCKET_MINUTES, pageWindow, windowTitle, dayStarts, buckets, isCharging,
   splitRuns, outages, OFFLINE_MS,
   smooth, simulatedHistory } from "./history.js";
 
@@ -36,6 +36,8 @@ const state = {
   history: null,
   /// The chart's range, "live", "day" or "week".
   range: ["live", "week"].includes(localStorage.getItem(RANGE_KEY)) ? localStorage.getItem(RANGE_KEY) : "day",
+  /// How many days or weeks back the chart is paged; 0 is the current one.
+  page: 0,
   /// What the chart was last drawn with, for hovering; and where the pointer is, if over it.
   chart: null,
   hoverX: null,
@@ -430,6 +432,7 @@ function startHistory() {
   state.history = demo ? new HistoryCache({ readings: simulatedHistory(state.snapshot.stateOfCharge) })
     : token ? new HistoryCache({ url: url || HISTORY_URL, token }) : null;
   state.hoverX = null;
+  state.page = 0;
   renderHistory();
   refreshHistory();
 }
@@ -460,8 +463,21 @@ function renderHistory() {
   for (const button of document.querySelectorAll("[data-range]")) {
     button.classList.toggle("on", button.dataset.range === state.range);
   }
+  const range = state.range, page = state.page, now = Date.now();
+  const { start, end } = pageWindow(range, page, new Date(now));
+  // The current window's readings come with each poll; an earlier one's are fetched once,
+  // drawing again when they arrive. The demo has none.
+  const past = page ? history.past.get(start) ?? (history.url ? undefined : []) : null;
+  if (page && !past) history.loadPast({ start, end }).then(() => { if (history === state.history) renderHistory(); });
+  const all = page ? past ?? [] : history.readings;
+  $("#history").classList.toggle("live", range === "live");
+  $("#history-when").textContent = windowTitle(range, { start, end }, new Date(now));
+  // Paged back to a day or week with nothing in it: the logger has nothing earlier.
+  $("#history-back").disabled = !!past && !past.some(([t]) => t >= start && t < end);
+  $("#history-forward").disabled = page === 0;
+
   // With nothing to draw, a failure says so quietly; while loading the chart is just empty.
-  const failed = history.readings.length === 0 && history.error !== null;
+  const failed = !page && history.readings.length === 0 && history.error !== null;
   $("#history-error").hidden = !failed;
   $("#chart").hidden = failed;
   const svg = $("#chart-svg"), box = svg.getBoundingClientRect();
@@ -470,14 +486,14 @@ function renderHistory() {
   // Full screen, the chart takes the height it's given and labels its gridlines on the right.
   const large = landscape.matches;
   const width = large ? box.width - Y_LABELS_WIDTH : box.width;
-  const range = state.range, H = large ? box.height - AXIS_HEIGHT : CHART_HEIGHT, now = Date.now();
-  const { start, end } = windowBounds(range, new Date(now));
+  const H = large ? box.height - AXIS_HEIGHT : CHART_HEIGHT;
   const x = (t) => ((t - start) / (end - start)) * width;
   const y = (soc) => H - (Math.min(100, Math.max(0, soc)) / 100) * H;
   const f = (n) => n.toFixed(1);
   const hline = (soc, attrs) => `<line x1="0" x2="${f(width)}" y1="${f(y(soc))}" y2="${f(y(soc))}" ${attrs}/>`;
-  const readings = history.readings.filter(([t]) => t >= start && t < end);
-  const latest = history.readings.at(-1);
+  const readings = all.filter(([t]) => t >= start && t < end);
+  // Only the current window ends on the charge now.
+  const latest = page ? null : history.readings.at(-1);
   // The line takes its color from its height, so its gradient spans the plot; the fill's
   // spans the highest charge down to 0, fading as it goes.
   const top = Math.max(1, ...readings.map(([, soc]) => soc));
@@ -492,7 +508,7 @@ function renderHistory() {
 
   // Hatched wherever the Delta Pro was offline, cut to the window and to now. Found from all
   // the readings, so one that began before the window still shows.
-  const offline = outages(history.readings, now)
+  const offline = outages(all, now)
     .map(([from, to]) => [Math.max(from, start), Math.min(to, end, now), from, to, to === now])
     .filter(([from, to]) => from < to);
   for (const [from, to] of offline) {
@@ -638,11 +654,25 @@ function setUpChart() {
   for (const button of document.querySelectorAll("[data-range]")) {
     button.addEventListener("click", () => {
       state.range = button.dataset.range;
+      state.page = 0;
       localStorage.setItem(RANGE_KEY, state.range);
+      unhover();
       renderHistory();
     });
   }
-  addEventListener("resize", () => { if (!$("#dashboard").hidden) renderHistory(); });
+  for (const [id, step] of [["#history-back", 1], ["#history-forward", -1]]) {
+    $(id).addEventListener("click", () => {
+      state.page = Math.max(0, state.page + step);
+      unhover();
+      renderHistory();
+    });
+  }
+  // Drawn again whenever the chart's box changes size. On a phone turning, the resize event
+  // comes before the new layout, so a redraw then measured the old box and stayed wrong
+  // until the next one; this fires once the layout has settled.
+  new ResizeObserver(() => { if (!$("#dashboard").hidden) renderHistory(); }).observe($("#chart"));
+  // Landscape is the chart alone and doesn't scroll: leave behind portrait's scroll position.
+  landscape.addEventListener("change", () => { if (landscape.matches) scrollTo(0, 0); });
 }
 
 // MARK: Raw values
