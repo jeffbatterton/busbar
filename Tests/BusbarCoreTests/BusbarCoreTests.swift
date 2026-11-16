@@ -249,6 +249,17 @@ extension QuotaParsingTests {
         #expect(HistoryRange.week.window(containing: date(8, 23), calendar: calendar).start == date(2, 0))  // Sunday
     }
 
+    @Test func pagesBackByDayOrWeek() {
+        // A day back from Monday Nov 2 is the 25-hour Sunday.
+        let yesterday = HistoryRange.today.window(containing: date(2, 9), offset: 1, calendar: calendar)
+        #expect(yesterday.start == date(1, 0))
+        #expect(yesterday.duration == 25 * 3600)
+        let lastWeek = HistoryRange.week.window(containing: date(8, 23), offset: 1, calendar: calendar)
+        #expect(lastWeek.start == calendar.date(from: DateComponents(year: 2026, month: 10, day: 26))!)  // Monday
+        #expect(lastWeek.end == date(2, 0))
+        #expect(HistoryRange.live.window(containing: date(2, 9), offset: 3, calendar: calendar).start == date(2, 6))
+    }
+
     @Test func liveCentersOnNow() {
         let live = HistoryRange.live.window(containing: date(2, 9), calendar: calendar)
         #expect(live.start == date(2, 6))

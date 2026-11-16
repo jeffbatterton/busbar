@@ -17,6 +17,9 @@ final class Monitor {
     private(set) var history = ChargeHistory()
     /// Set when the logger can't be reached and there's nothing to show.
     private(set) var historyError: String?
+    /// Earlier days' and weeks' readings, fetched as the chart pages back to them, by window start.
+    private(set) var pastHistory: [Date: ChargeHistory] = [:]
+    private var pastLoading: Set<Date> = []
     /// The thresholds the logger last accepted, so they're only sent when they change.
     private var savedThresholds: [Double]?
     /// Outputs with a switch command in flight.
@@ -132,6 +135,7 @@ final class Monitor {
     func resetHistory() {
         history = ChargeHistory()
         historyError = nil
+        pastHistory = [:]
         savedThresholds = nil
         refreshNow()
     }
@@ -217,6 +221,19 @@ final class Monitor {
         if thresholds != savedThresholds,
            (try? await client.saveThresholds(low: thresholds[0], critical: thresholds[1])) != nil {
             savedThresholds = thresholds
+        }
+    }
+
+    /// Fetches an earlier window's readings once; the past doesn't change. Takes in 11 hours
+    /// either side, so an outage running across its edges shows as it was (a week and both
+    /// sides stay within the logger's 8 days a request). A failure is retried next time it's shown.
+    func loadPastHistory(_ window: DateInterval) async {
+        guard let client = settings.historyClient, pastHistory[window.start] == nil,
+              pastLoading.insert(window.start).inserted else { return }
+        defer { pastLoading.remove(window.start) }
+        let margin: TimeInterval = 11 * 3600
+        if let readings = try? await client.readings(since: window.start - margin, until: window.end + margin) {
+            pastHistory[window.start] = ChargeHistory(readings: readings)
         }
     }
 

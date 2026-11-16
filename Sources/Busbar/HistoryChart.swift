@@ -2,7 +2,7 @@ import BusbarCore
 import Charts
 import SwiftUI
 
-/// The charge live, over today or over this week: a smooth line on a fixed 0–100% scale, colored by
+/// The charge live, over a day or over a week: a smooth line on a fixed 0–100% scale, colored by
 /// height from green down through yellow at the low threshold to red at critical, and a faint
 /// dashed line at the low battery threshold. The line
 /// runs straight on across the few minutes the logger sometimes misses; where the Delta Pro
@@ -14,6 +14,8 @@ import SwiftUI
 struct HistoryChart: View {
     let history: ChargeHistory
     let range: HistoryRange
+    /// The day or week shown: the current one, or an earlier one paged back to.
+    let window: DateInterval
     let lowThreshold: Double
     let criticalThreshold: Double
     var isLarge = false
@@ -24,8 +26,6 @@ struct HistoryChart: View {
     @State private var hovered: ChargeReading?
     /// The offline stretch under the pointer, and where in it the pointer is.
     @State private var hoveredOutage: (outage: DateInterval, at: Date)?
-
-    private var window: DateInterval { range.window(containing: .now) }
 
     private var readings: [ChargeReading] {
         let window = window
@@ -122,7 +122,7 @@ struct HistoryChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1))
                 dot(at: hovered)
             }
-            if let last = readings.last { dot(at: last) }
+            if let last = readings.last, window.end > now { dot(at: last) }
         }
         .chartXScale(domain: window.start...window.end)
         .chartYScale(domain: 0...100)
@@ -177,7 +177,7 @@ struct HistoryChart: View {
                 if let hovered, let plot = proxy.plotFrame,
                    let x = proxy.position(forX: hovered.time), let y = proxy.position(forY: hovered.stateOfCharge) {
                     let frame = geometry[plot]
-                    tooltip(for: hovered, isLatest: hovered == readings.last)
+                    tooltip(for: hovered, isLatest: hovered == readings.last && window.end > now)
                         .fixedSize()
                         .position(x: min(frame.maxX - 60, max(frame.minX + 50, frame.minX + x)),
                                   y: frame.minY + max(4, y) - (isLarge ? 34 : 18))

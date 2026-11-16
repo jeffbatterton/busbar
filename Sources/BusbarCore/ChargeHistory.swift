@@ -40,6 +40,14 @@ public enum HistoryRange: String, Sendable, CaseIterable {
         return calendar.dateInterval(of: self == .today ? .day : .weekOfYear, for: date)!
     }
 
+    /// The window `offset` before the one containing `date`: yesterday or last week at 1.
+    /// Live doesn't page, so it's always around `date`.
+    public func window(containing date: Date, offset: Int, calendar: Calendar = .current) -> DateInterval {
+        guard self != .live, offset != 0 else { return window(containing: date, calendar: calendar) }
+        let earlier = calendar.date(byAdding: self == .today ? .day : .weekOfYear, value: -offset, to: date)!
+        return window(containing: earlier, calendar: calendar)
+    }
+
     /// Readings are averaged into buckets this long before the line is drawn.
     public var bucket: TimeInterval {
         switch self {

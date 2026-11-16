@@ -301,30 +301,108 @@ struct DropdownView: View {
     }
 }
 
-/// The Battery chart with its range picker: in the dropdown, or large, filling the window.
+/// The Battery chart with its pager and range picker: in the dropdown, or large, filling the window.
 struct BatteryHistory: View {
     let monitor: Monitor
     let isLarge: Bool
+    /// How many days or weeks back the chart is paged; 0 is the current one.
+    @State private var offset = 0
 
     var body: some View {
         @Bindable var settings = monitor.settings
+        let range = settings.historyRange
+        let window = range.window(containing: .now, offset: offset)
+        // The current window's readings come with each refresh; earlier ones are fetched once.
+        let past = offset > 0 ? monitor.pastHistory[window.start] : nil
+        let history = offset > 0 ? past ?? ChargeHistory() : monitor.history
+        // Paged back to a day or week with nothing in it: the logger has nothing earlier.
+        let isEarliest = past.map { !$0.readings.contains { window.contains($0.time) } } ?? false
         return VStack(alignment: .leading, spacing: isLarge ? 16 : 8) {
             HStack(spacing: 8) {
-                Text("Battery").font(isLarge ? .title3.weight(.semibold) : .subheadline.weight(.semibold))
+                HistoryPager(title: Self.title(of: window, range: range), isLarge: isLarge, pages: range != .live,
+                             canGoBack: !isEarliest, canGoForward: offset > 0) { offset += $0 }
                 Spacer()
                 RangePicker(selection: $settings.historyRange, isLarge: isLarge)
             }
-            if monitor.history.readings.isEmpty, let error = monitor.historyError {
+            if offset == 0, monitor.history.readings.isEmpty, let error = monitor.historyError {
                 Text("History unavailable: \(error)")
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if isLarge { Spacer() }
             } else {
-                HistoryChart(history: monitor.history, range: settings.historyRange,
+                HistoryChart(history: history, range: range, window: window,
                              lowThreshold: settings.lowThreshold, criticalThreshold: settings.criticalThreshold,
                              isLarge: isLarge,
                              limits: monitor.snapshot.map { $0.dischargeLimit...$0.chargeLimit })
             }
         }
+        .onChange(of: range) { offset = 0 }
+        .task(id: window.start) {
+            if offset > 0 { await monitor.loadPastHistory(window) }
+        }
+    }
+
+    /// The day shown, "Mon, Nov 16" (today's for Live), or the week's days, "Nov 16 – 22".
+    static func title(of window: DateInterval, range: HistoryRange) -> String {
+        switch range {
+        case .live: return Date.now.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        case .today: return window.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        case .week:
+            let last = window.end.addingTimeInterval(-1)
+            let sameMonth = Calendar.current.isDate(window.start, equalTo: last, toGranularity: .month)
+            return "\(window.start.formatted(.dateTime.month(.abbreviated).day())) – "
+                + (sameMonth ? last.formatted(.dateTime.day()) : last.formatted(.dateTime.month(.abbreviated).day()))
+        }
+    }
+}
+
+/// ‹ Mon, Nov 16 ›: the window shown, with arrows to page back and forward through earlier
+/// ones. Live shows just the date.
+private struct HistoryPager: View {
+    let title: String
+    let isLarge: Bool
+    let pages: Bool
+    let canGoBack: Bool
+    let canGoForward: Bool
+    /// 1 to go back a day or week, -1 to come forward.
+    let page: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            if pages { arrow("chevron.left", label: "Earlier", step: 1, enabled: canGoBack) }
+            Text(title)
+                .font(.system(size: isLarge ? 15 : 12, weight: .semibold))
+                .monospacedDigit()
+                .frame(minWidth: pages ? (isLarge ? 104 : 80) : nil)
+            if pages { arrow("chevron.right", label: "Later", step: -1, enabled: canGoForward) }
+        }
+        .padding(.leading, pages ? (isLarge ? -6 : -4) : 0)
+    }
+
+    private func arrow(_ symbol: String, label: String, step: Int, enabled: Bool) -> some View {
+        Button { page(step) } label: {
+            Image(systemName: symbol)
+                .font(.system(size: isLarge ? 12 : 10, weight: .semibold))
+                .frame(width: isLarge ? 22 : 18, height: isLarge ? 22 : 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PagerArrowStyle())
+        .disabled(!enabled)
+        .accessibilityLabel(label)
+    }
+}
+
+/// Secondary, lighter and on a faint square under the pointer, dimmed when there's nowhere to go.
+private struct PagerArrowStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isHovered && isEnabled ? .primary : .secondary)
+            .background(.primary.opacity(isHovered && isEnabled ? (configuration.isPressed ? 0.14 : 0.08) : 0),
+                        in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            .opacity(isEnabled ? 1 : 0.3)
+            .onHover { isHovered = $0 }
     }
 }
 
