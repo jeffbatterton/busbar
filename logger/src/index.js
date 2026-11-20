@@ -22,10 +22,11 @@ export default {
 /// marked as such, so the charts can be built before developer access comes through.
 export async function record(env, now) {
   const simulated = !env.ECOFLOW_ACCESS_KEY;
+  // The latest row, found by its key: one row read.
+  const last = await env.DB.prepare("SELECT t, soc, simulated FROM readings ORDER BY t DESC LIMIT 1").first();
   let s;
   if (simulated) {
     // Workers don't keep state between runs, so carry the simulation on from the last row.
-    const last = await env.DB.prepare("SELECT t, soc FROM readings ORDER BY t DESC LIMIT 1").first();
     const source = Object.assign(new SimulatedSource(), { timeScale: 1 });
     if (last) Object.assign(source, { soc: last.soc, lastTick: new Date(last.t) });
     s = parseDeltaPro(source.quotas(now), now);
@@ -38,8 +39,10 @@ export async function record(env, now) {
   }
 
   const statements = [];
-  // The first real reading clears out the simulated ones.
-  if (!simulated) statements.push(env.DB.prepare("DELETE FROM readings WHERE simulated = 1"));
+  // The first real reading clears out the simulated ones. Only then: with no index on
+  // `simulated` the delete reads every row, and run each minute that adds up past D1's
+  // free daily reads.
+  if (!simulated && last?.simulated === 1) statements.push(env.DB.prepare("DELETE FROM readings WHERE simulated = 1"));
   statements.push(env.DB.prepare(
     "INSERT OR REPLACE INTO readings (t, soc, watts_in, watts_out, simulated) VALUES (?, ?, ?, ?, ?)",
   ).bind(now.getTime(), Math.round(s.stateOfCharge * 10) / 10, s.wattsIn, s.wattsOut, simulated ? 1 : 0));
