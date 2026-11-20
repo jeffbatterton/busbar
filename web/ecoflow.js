@@ -85,11 +85,14 @@ export class DeltaProSource {
     this.client = new EcoFlowClient(credentials);
   }
 
-  /// Throws rather than passing off old readings as new while the device is offline.
+  /// Throws rather than passing off old readings as new while the device is offline, or an
+  /// incomplete reading as a real one.
   async snapshot() {
     const [quotas, online] = await Promise.all([this.client.allQuotas(), this.client.isOnline()]);
     if (!online) throw new EcoFlowError("Delta Pro is offline");
-    return parseDeltaPro(quotas);
+    const snapshot = parseDeltaPro(quotas);
+    if (isIncomplete(snapshot)) throw new EcoFlowError("Delta Pro sent an incomplete reading");
+    return snapshot;
   }
 
   quotas() {
@@ -198,6 +201,13 @@ export function parseDeltaPro(q, timestamp = new Date()) {
     warnings,
     timestamp,
   };
+}
+
+/// 0% with nothing coming in or going out: what EcoFlow sends now and then while the Delta
+/// Pro's connection is flaky, with the charge missing. A Delta Pro really at 0% has shut
+/// itself off, so it isn't reporting at all.
+export function isIncomplete(s) {
+  return s.stateOfCharge === 0 && s.wattsIn === 0 && s.wattsOut === 0;
 }
 
 /// Problems to deal with right away, for the banner at the top: a battery gone offline,

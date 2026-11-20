@@ -1,7 +1,7 @@
 // Run with: node --test web/
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { signature, parseDeltaPro, withOutput, restoreOutput, urgentProblems, otherWarnings } from "./ecoflow.js";
+import { signature, parseDeltaPro, withOutput, restoreOutput, urgentProblems, otherWarnings, isIncomplete } from "./ecoflow.js";
 
 test("signature matches the reference implementation", async () => {
   // Reference: hmac.new(b"secret", b"sn=DCABZ123&accessKey=AK&nonce=345164&timestamp=1681872798000", sha256)
@@ -59,4 +59,10 @@ test("an offline extra battery and battery faults go in the banner, other warnin
   const s = parseDeltaPro({ "ems.bms0Online": 3, "ems.bms1Online": 0, "bmsMaster.errCode": 52, "inv.errCode": 7 });
   assert.deepEqual(urgentProblems(s), ["Extra battery offline", "Battery fault (52)"]);
   assert.deepEqual(otherWarnings(s), ["Inverter fault (7)"]);
+});
+
+test("0% with no power in or out is an incomplete reading", () => {
+  assert.equal(isIncomplete(parseDeltaPro({ "pd.wattsInSum": 0, "pd.wattsOutSum": 0 })), true);
+  assert.equal(isIncomplete(parseDeltaPro({ "ems.f32LcdShowSoc": 96.3, "pd.wattsOutSum": 0 })), false);
+  assert.equal(isIncomplete(parseDeltaPro({ "ems.f32LcdShowSoc": 0, "pd.wattsOutSum": 40 })), false);
 });
