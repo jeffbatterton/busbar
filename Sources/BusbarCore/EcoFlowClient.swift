@@ -29,6 +29,7 @@ public enum EcoFlowError: LocalizedError {
     case api(code: String, message: String)
     case malformedResponse
     case offline
+    case incomplete
 
     public var errorDescription: String? {
         switch self {
@@ -36,6 +37,7 @@ public enum EcoFlowError: LocalizedError {
         case .api(let code, let message): "EcoFlow error \(code): \(message)"
         case .malformedResponse: "Unexpected response from EcoFlow"
         case .offline: "Delta Pro is offline"
+        case .incomplete: "Delta Pro sent an incomplete reading"
         }
     }
 }

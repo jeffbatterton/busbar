@@ -121,6 +121,11 @@ public struct PowerSnapshot: Sendable, Equatable {
 }
 
 extension PowerSnapshot {
+    /// 0% with nothing coming in or going out: what EcoFlow sends now and then while the
+    /// Delta Pro's connection is flaky, with the charge missing. A Delta Pro really at 0%
+    /// has shut itself off, so it isn't reporting at all.
+    public var isIncomplete: Bool { stateOfCharge == 0 && wattsIn == 0 && wattsOut == 0 }
+
     /// Interprets Delta Pro quotas. Field names come from EcoFlow's Delta Pro
     /// developer docs; `bmsSlave1.*` is undocumented but reported by real units.
     public init(deltaPro q: Quotas, at timestamp: Date = .now) {

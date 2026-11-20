@@ -24,6 +24,12 @@ import Testing
         "pd.model": "not-a-number",
     ])
 
+    @Test func zeroChargeWithNoPowerIsIncomplete() {
+        #expect(PowerSnapshot(deltaPro: Quotas(["pd.wattsInSum": 0, "pd.wattsOutSum": 0])).isIncomplete)
+        #expect(!PowerSnapshot(deltaPro: quotas).isIncomplete)
+        #expect(!PowerSnapshot(deltaPro: Quotas(["ems.f32LcdShowSoc": 0, "pd.wattsInSum": 300])).isIncomplete)
+    }
+
     @Test func parsesCoreValues() {
         let s = PowerSnapshot(deltaPro: quotas)
         #expect(s.stateOfCharge == 64.5)
