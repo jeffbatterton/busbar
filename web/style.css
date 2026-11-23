@@ -77,6 +77,12 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
 .pull { position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 6px); text-align: center;
         opacity: 0; transition: opacity 0.2s; pointer-events: none; }
 .pull.show { opacity: 1; }
+/* On a phone the wrappers are just their children, and the chart sits above the cards. */
+.main, .side { display: contents; }
+#history { order: 1; }
+.side > .card { order: 2; }
+.foot { order: 3; }
+.scale, .stats { display: none; }
 
 .top { display: flex; align-items: center; color: var(--text-2); font-size: 13px; }
 .top b { color: var(--text); font-size: 17px; font-weight: 600; }
@@ -203,7 +209,7 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
    footer are left out; the chart's overline carries the level. */
 @media (orientation: landscape) and (max-height: 500px) {
   #dashboard .content { max-width: none; height: 100dvh; padding: 0; overflow: hidden; }
-  #dashboard .content > :not(#history), #pull { display: none !important; }
+  #dashboard .content > :not(.main), .side, #pull { display: none !important; }
   #history { flex: 1; display: flex; flex-direction: column; background: none; border-radius: 0;
              padding: calc(env(safe-area-inset-top) + 14px) calc(env(safe-area-inset-right) + 6px)
                       calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 6px); }
@@ -215,6 +221,65 @@ h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
   #history .chart { flex: 1; min-height: 0; padding-bottom: 0; }
   #history .chart svg { height: 100%; }
   .tip .w { display: block; font-size: 11px; }
+}
+
+/* iPad and wider. The chart is drawn large, with its levels labeled on the right. */
+@media (min-width: 700px) and (min-height: 600px) {
+  .content { max-width: 1400px; gap: 16px; padding: calc(env(safe-area-inset-top) + 24px) 32px calc(env(safe-area-inset-bottom) + 18px); }
+  .top { font-size: 14px; }
+  .top b { font-size: 20px; }
+  .dot { width: 8px; height: 8px; margin-right: 8px; }
+  .big small { font-size: 0.54em; letter-spacing: -1px; color: var(--text-2); }
+  .card { border-radius: 20px; }
+  .r { height: 54px; font-size: 16px; }
+  #history { padding-bottom: 16px; }
+  .history-title { display: inline; margin-right: 10px; }
+  #history-soc { color: var(--text); margin-left: 6px; }
+  .pager { margin-left: 0; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  #history-when { color: var(--text); font-size: 14px; min-width: 104px; }
+  .live #history-when { min-width: 0; }
+  .seg button { padding: 5px 14px; font-size: 13px; }
+  .chart { padding: 12px 0 4px; }
+  .chart text { font-size: 11px; }
+  .tip .w { display: block; font-size: 11px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 12px; padding-top: 12px;
+           border-top: 1px solid var(--hair); }
+  .stats div { display: flex; flex-direction: column; gap: 2px; }
+  .stats small { font-size: 12px; color: var(--text-2); }
+  .stats b { font-size: 20px; font-weight: 600; }
+  .stats b.in { color: var(--in); }
+}
+
+/* iPad portrait: one column, a tall chart under a big level, and power in and out side by side. */
+@media (min-width: 700px) and (min-height: 600px) and (orientation: portrait) {
+  .content { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding-left: 36px; padding-right: 36px; }
+  .content > *, .main > *, .side > * { grid-column: 1 / -1; }
+  .side > .power { grid-column: auto; }
+  .big { font-size: 104px; letter-spacing: -3.5px; line-height: 0.9; }
+  .flow { padding-bottom: 8px; }
+  .flow b { font-size: 22px; }
+  .flow span { font-size: 16px; }
+  .bar { height: 10px; border-radius: 5px; margin-top: 20px; }
+  .bar-track { border-radius: 5px; }
+  .scale { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  #chart-svg { height: 300px; }
+}
+
+/* iPad landscape, and desktop windows: the whole dashboard on one screen, the level and
+   cards on the left and the chart filling the right. */
+@media (min-width: 700px) and (min-height: 600px) and (orientation: landscape) {
+  .content { min-height: 100dvh; }
+  .main { display: grid; grid-template-columns: 376px 1fr; gap: 20px; flex: 1; min-height: 0; }
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .hero { background: var(--card); border-radius: 20px; padding: 18px 24px; }
+  .big { font-size: 76px; letter-spacing: -2.5px; line-height: 0.9; }
+  .flow { padding-bottom: 4px; }
+  .flow b { font-size: 18px; }
+  .bar { margin-top: 18px; }
+  .r { height: 48px; font-size: 15px; }
+  #history { display: flex; flex-direction: column; min-height: 420px; }
+  #history .chart { flex: 1; min-height: 0; }
+  #chart-svg { height: 100%; }
 }
 
 /* Raw values */

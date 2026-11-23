@@ -18,6 +18,8 @@ const HISTORY_URL = "https://busbar-logger.jeffbatterton.workers.dev";
 const $ = (selector) => document.querySelector(selector);
 /// A phone on its side: the dashboard is just the chart, full screen.
 const landscape = matchMedia("(orientation: landscape) and (max-height: 500px)");
+/// An iPad or a desktop window, laid out wider in style.css.
+const wide = matchMedia("(min-width: 700px) and (min-height: 600px)");
 const demo = new URLSearchParams(location.search).has("demo");
 
 const state = {
@@ -285,7 +287,7 @@ function render() {
   renderStatus();
 
   const soc = Math.round(s.stateOfCharge);
-  $("#soc").textContent = `${soc}%`;
+  $("#soc").innerHTML = `${soc}<small>%</small>`;
   $("#history-soc").textContent = `${soc}%`;
   const level = levelColor(soc);
   renderBar(s, level);
@@ -355,6 +357,9 @@ function renderBar(s, level) {
     $(id).hidden = limit <= 0 || limit >= 100;
     $(id).style.left = `${limit}%`;
   }
+  // Named under the bar on a wide screen.
+  $("#scale-low").textContent = low > 0 ? `Discharge limit ${low}%` : "";
+  $("#scale-high").textContent = high < 100 ? `Charge limit ${high}%` : "";
 }
 
 /// The charge bar's color. Hex, not var(--good), so SVG
@@ -483,8 +488,11 @@ function renderHistory() {
   const svg = $("#chart-svg"), box = svg.getBoundingClientRect();
   if (failed || !box.width) return;
 
-  // Full screen, the chart takes the height it's given and labels its gridlines on the right.
-  const large = landscape.matches;
+  renderStats(all.filter(([t]) => t >= start && t < end));
+
+  // Full screen or on a wide screen, the chart takes the height it's given and labels its
+  // gridlines on the right.
+  const large = landscape.matches || wide.matches;
   const width = large ? box.width - Y_LABELS_WIDTH : box.width;
   const H = large ? box.height - AXIS_HEIGHT : CHART_HEIGHT;
   const x = (t) => ((t - start) / (end - start)) * width;
@@ -535,13 +543,15 @@ function renderHistory() {
       parts.push(label(x(hour.getTime()), text));
     }
   } else if (range === "day") {
-    const labels = large ? ["12am", "3am", "6am", "9am", "12pm", "3pm", "6pm", "9pm"] : ["12am", "6am", "12pm", "6pm"];
+    const labels = width > 800 ? ["12am", "2am", "4am", "6am", "8am", "10am", "12pm", "2pm", "4pm", "6pm", "8pm", "10pm"]
+      : large ? ["12am", "3am", "6am", "9am", "12pm", "3pm", "6pm", "9pm"] : ["12am", "6am", "12pm", "6pm"];
     labels.forEach((text, i) => parts.push(label((width * i) / labels.length, text, i ? "middle" : "start")));
   } else {
     const days = dayStarts(start, 7);
     ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((text, i) => {
       if (i) parts.push(`<line x1="${f(x(days[i]))}" x2="${f(x(days[i]))}" y1="0" y2="${H}" stroke="rgba(255,255,255,.07)"/>`);
-      parts.push(label((x(days[i]) + x(days[i + 1])) / 2, text, "middle", now >= days[i] && now < days[i + 1]));
+      const day = width > 800 ? `${text} ${new Date(days[i]).getDate()}` : text;
+      parts.push(label((x(days[i]) + x(days[i + 1])) / 2, day, "middle", now >= days[i] && now < days[i + 1]));
     });
   }
   parts.push(hline(state.thresholds.lowThreshold, 'stroke="#ffd60a" stroke-opacity=".22" stroke-dasharray="2 3"'));
@@ -565,10 +575,10 @@ function renderHistory() {
     parts.push(`<line x1="${f(from[0])}" y1="${f(from[1])}" x2="${f(to[0])}" y2="${f(to[1])}" stroke="${lineColor((from[2] + to[2]) / 2)}"
       stroke-opacity=".55" stroke-width="${large ? 2 : 1.5}" stroke-dasharray="0.1 4" stroke-linecap="round"/>`);
     for (const [cx, cy, soc] of [from, to]) {
-      parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${large ? 3 : 2.5}" fill="${large ? BACKGROUND : PANEL}" stroke="${lineColor(soc)}" stroke-width="1.5"/>`);
+      parts.push(`<circle cx="${f(cx)}" cy="${f(cy)}" r="${large ? 3 : 2.5}" fill="${landscape.matches ? BACKGROUND : PANEL}" stroke="${lineColor(soc)}" stroke-width="1.5"/>`);
     }
   });
-  const dot = `r="${large ? 5 : 4}" stroke="${large ? BACKGROUND : PANEL}" stroke-width="2"`;
+  const dot = `r="${large ? 5 : 4}" stroke="${landscape.matches ? BACKGROUND : PANEL}" stroke-width="2"`;
   if (latest && latest[0] >= start && latest[0] < end) {
     parts.push(`<circle cx="${f(x(latest[0]))}" cy="${f(y(latest[1]))}" fill="${lineColor(latest[1])}" ${dot}/>`);
   }
@@ -579,6 +589,27 @@ function renderHistory() {
   state.chart = { readings, latest, range, width, start, end, x, y, H, offline };
   if (state.hoverX === null) $("#chart-tip").hidden = true;
   else hover(state.hoverX);
+}
+
+/// Under the chart on a wide screen: the window's lowest and highest charge, and the energy
+/// in and used, from each reading's watts until the next. Gaps where the Delta Pro was
+/// offline count for nothing.
+function renderStats(readings) {
+  const socs = readings.map(([, soc]) => soc);
+  let whIn = 0, whOut = 0;
+  readings.slice(1).forEach(([t], i) => {
+    const [from, , wattsIn, wattsOut] = readings[i], hours = (t - from) / 3600000;
+    if (t - from > OFFLINE_MS) return;
+    whIn += wattsIn * hours;
+    whOut += wattsOut * hours;
+  });
+  const energy = (wh) => wh >= 1000 ? `${(wh / 1000).toFixed(1)} kWh` : `${Math.round(wh)} Wh`;
+  const none = readings.length < 2;
+  $("#stat-low").textContent = socs.length ? `${Math.round(Math.min(...socs))}%` : "–";
+  $("#stat-high").textContent = socs.length ? `${Math.round(Math.max(...socs))}%` : "–";
+  $("#stat-in").textContent = none ? "–" : energy(whIn);
+  $("#stat-in").classList.toggle("in", !none && whIn > 0);
+  $("#stat-out").textContent = none ? "–" : energy(whOut);
 }
 
 /// Snaps to the recorded reading nearest the pointer, which is never past now.
@@ -609,7 +640,7 @@ function hover(px) {
     : (chart.range === "week" ? `${date.toLocaleDateString([], { weekday: "short" })} ` : "")
       + date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   tip.innerHTML = `<b>${Math.round(soc)}%</b> ${at}${isCharging(reading) ? " · charging" : ""}`;
-  if (landscape.matches) {
+  if (landscape.matches || wide.matches) {
     const [, , wattsIn, wattsOut] = reading;
     tip.innerHTML += `<span class="w">${wattsIn > 0 ? `<span style="color:var(--in)">${watts(wattsIn)} in</span> · ` : ""}${watts(wattsOut)} out</span>`;
   }
